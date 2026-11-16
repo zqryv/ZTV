@@ -69,7 +69,11 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
       - name: Prebuild (mobile) — 不设置 EXPO_TV，生成普通 Android 工程
-        run: npx expo prebuild --platform android --clean && yarn copy-config
+        run: |
+          npx expo prebuild --platform android --clean
+          yarn copy-config
+          # 手机工程没有 Leanback 横幅资源，移除 TV 专用 banner 引用（TV 构建保持原样）
+          sed -i 's/ android:banner="@drawable\/tv_banner"//' android/app/src/main/AndroidManifest.xml
       - name: Build release APK
         run: cd android && ./gradlew assembleRelease
       - name: Stage artifact
