@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "description": "ZTV desktop shell (Windows / Ubuntu) wrapping the react-native-web build",
   "homepage": "https://github.com/zqryv/ZTV",
+  "author": {
+    "name": "ZTV",
+    "email": "ztv@example.com"
+  },
   "main": "main.js",
   "private": true,
   "scripts": {
@@ -51,7 +55,8 @@
       "artifactName": "ZTV-v${version}-${os}-${arch}.${ext}"
     },
     "deb": {
-      "depends": []
+      "depends": [],
+      "maintainer": "ZTV <ztv@example.com>"
     }
   }
 }
