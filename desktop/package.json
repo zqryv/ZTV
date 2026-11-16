@@ -1,0 +1,56 @@
+{
+  "name": "ztv-desktop",
+  "productName": "ZTV",
+  "version": "1.0.0",
+  "description": "ZTV desktop shell (Windows / Ubuntu) wrapping the react-native-web build",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.ztv.player",
+    "productName": "ZTV",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "web-build/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "ZTV-v${version}-windows-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "category": "Video",
+      "artifactName": "ZTV-v${version}-${os}-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": []
+    }
+  }
+}

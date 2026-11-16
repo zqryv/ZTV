@@ -1,0 +1,148 @@
+name: ZTV Release (all platforms)
+
+# 手动触发或推送 v* 标签时构建四个平台的安装包，并发布到 GitHub Release。
+# 部署到自己的仓库后，UpdateConfig.ts 中的仓库地址需与之保持一致。
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    name: Read version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+  android-tv:
+    name: Android TV APK
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Prebuild (TV)
+        run: yarn prebuild
+      - name: Build release APK
+        run: yarn build
+      - name: Stage artifact
+        run: |
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "artifacts/ZTV-v${{ needs.version.outputs.version }}-android-tv.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-tv
+          path: artifacts/*.apk
+
+  android:
+    name: Android phone/tablet APK
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Prebuild (mobile) — 不设置 EXPO_TV，生成普通 Android 工程
+        run: npx expo prebuild --platform android --clean && yarn copy-config
+      - name: Build release APK
+        run: cd android && ./gradlew assembleRelease
+      - name: Stage artifact
+        run: |
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "artifacts/ZTV-v${{ needs.version.outputs.version }}-android.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: artifacts/*.apk
+
+  desktop:
+    name: Windows / Ubuntu installers
+    runs-on: ${{ matrix.os }}
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+            pattern: "desktop/release/*.exe"
+            name: windows
+          - os: ubuntu-latest
+            script: dist:linux
+            pattern: "desktop/release/*.deb"
+            name: ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - name: Install app dependencies
+        run: yarn install --frozen-lockfile
+      - name: Export web bundle
+        run: npx expo export --platform web --output-dir desktop/web-build
+      - name: Install desktop build dependencies
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+      - name: Build installer
+        working-directory: desktop
+        run: npm run ${{ matrix.script }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.pattern }}
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [version, android-tv, android, desktop]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          name: ZTV v${{ needs.version.outputs.version }}
+          body: |
+            ZTV v${{ needs.version.outputs.version }}
+
+            - ZTV-v${{ needs.version.outputs.version }}-android-tv.apk — Android TV（联想/乐视等）
+            - ZTV-v${{ needs.version.outputs.version }}-android.apk — Android 手机/平板
+            - ZTV-v${{ needs.version.outputs.version }}-windows-setup.exe — Windows x64
+            - ZTV-v${{ needs.version.outputs.version }}-ubuntu-amd64.deb — Ubuntu x64
+          draft: false
+          prerelease: false
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
