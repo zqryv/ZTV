@@ -47,7 +47,7 @@ yarn typecheck       # TypeScript 类型检查
 | --- | --- | --- |
 | Android TV（联想/乐视等） | `ZTV-v{version}-android-tv.apk` | U 盘拷贝或 adb `install -r` 安装；长按桌面图标设为启动器 |
 | Android 手机/平板 | `ZTV-v{version}-android.apk` | 直接安装，允许「未知来源」 |
-| Ubuntu（x86_64） | `ZTV-v{version}-ubuntu-amd64.deb` | `sudo apt install ./ZTV-v{version}-ubuntu-amd64.deb` |
+| Ubuntu（x86_64） | `ZTV-v{version}-linux-amd64.deb` | `sudo apt install ./ZTV-v{version}-linux-amd64.deb` |
 | Windows（x86_64） | `ZTV-v{version}-windows-setup.exe` | 双击安装 |
 
 > 说明：本项目为 React Native TVOS 应用，原生支持 Android TV / Apple TV。Windows 与 Ubuntu 安装包通过 Web 版（react-native-web）+ Electron 封装提供，用于在大屏/电脑上体验界面；直播播放能力以 Android TV 版为准。构建脚本见 `.github/workflows/release.yml`。
