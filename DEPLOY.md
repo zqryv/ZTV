@@ -53,14 +53,14 @@ git push origin v1.0.0
 | Android TV | `ZTV-v1.0.0-android-tv.apk` |
 | Android 手机/平板 | `ZTV-v1.0.0-android.apk` |
 | Windows | `ZTV-v1.0.0-windows-setup.exe` |
-| Ubuntu | `ZTV-v1.0.0-ubuntu-amd64.deb` |
+| Ubuntu | `ZTV-v1.0.0-linux-amd64.deb` |
 
 ## 4. 各平台安装方式
 
 - **Android TV（联想/乐视等 1.x+）**：U 盘拷贝 APK 到电视安装，或用 `adb install -r ZTV-v1.0.0-android-tv.apk`；安装后在「应用」里将 ZTV 设为启动器可开机自启。Leanback 启动项与横幅已保留。
 - **Android 手机/平板**：直接安装 APK，允许「未知来源」。
 - **Windows**：双击 `ZTV-v1.0.0-windows-setup.exe` 安装。
-- **Ubuntu**：`sudo apt install ./ZTV-v1.0.0-ubuntu-amd64.deb`。
+- **Ubuntu**：`sudo apt install ./ZTV-v1.0.0-linux-amd64.deb`。
 
 > Windows / Ubuntu 安装包由 `desktop/` 下的 Electron 外壳封装 react-native-web 导出物生成。受原生模块限制，桌面版的视频解码能力弱于 Android TV 版，主要用于大屏浏览与设置体验。
 
