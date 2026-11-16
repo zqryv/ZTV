@@ -3,7 +3,7 @@
  * 部署到 GitHub 后，只需把 GITHUB_OWNER / GITHUB_REPO 改成你的仓库，
  * 应用即可从该仓库读取 package.json 的版本号并下载 Release 里对应平台的安装包。
  */
-const GITHUB_OWNER = "ztv-app";
+const GITHUB_OWNER = "zqryv";
 const GITHUB_REPO = "ZTV";
 const GITHUB_RAW_BASE = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download`;
