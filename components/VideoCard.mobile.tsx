@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, forwardRef } from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity, Alert, Animated } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated } from "react-native";
 import { useRouter } from "expo-router";
 import { Star, Play } from "lucide-react-native";
 import { PlayRecordManager } from "@/services/storage";
@@ -8,6 +8,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors } from "@/constants/Colors";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { DeviceUtils } from "@/utils/DeviceUtils";
+import PosterImage from "./PosterImage";
 import Logger from '@/utils/Logger';
 
 const logger = Logger.withTag('VideoCardMobile');
@@ -122,7 +123,7 @@ const VideoCardMobile = forwardRef<View, VideoCardMobileProps>(
           delayLongPress={800}
         >
           <View style={styles.card}>
-            <Image source={{ uri: api.getImageProxyUrl(poster) }} style={styles.poster} />
+            <PosterImage poster={poster} api={api} style={styles.poster} />
             
             {/* 进度条 */}
             {isContinueWatching && (

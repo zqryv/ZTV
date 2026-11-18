@@ -6,6 +6,7 @@ import {
   ScrollView,
   Platform,
   Alert,
+  useTVEventHandler,
 } from "react-native";
 import Toast from "react-native-toast-message";
 import { ThemedText } from "@/components/ThemedText";
@@ -13,6 +14,7 @@ import { StyledButton } from "@/components/StyledButton";
 import { SettingsSection } from "./SettingsSection";
 import { Colors } from "@/constants/Colors";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { testM3uUrl } from "@/services/m3u";
 import {
@@ -28,7 +30,7 @@ interface TVSourcesSectionProps {
 }
 
 export interface TVSourcesSectionRef {
-  /** 供遥控器远程输入使用：把文本写入当前正在编辑的地址框 */
+  /** 供遥控器远程输入使用：把文本写入当前正在编辑的输入框（名称/地址） */
   setInputValue: (value: string) => void;
 }
 
@@ -41,25 +43,48 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
       updateLiveSource,
       removeLiveSource,
       bindLiveSource,
+      remoteInputEnabled,
     } = useSettingsStore();
     const { deviceType } = useResponsiveLayout();
+    const { serverUrl } = useRemoteControlStore();
 
     const [isSectionFocused, setIsSectionFocused] = useState(false);
+    const [focusedInput, setFocusedInput] = useState<"name" | "url">("url");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [nameInput, setNameInput] = useState("");
     const [urlInput, setUrlInput] = useState("");
     const [testingId, setTestingId] = useState<string | null>(null);
     const [testResults, setTestResults] = useState<Record<string, M3uTestResult>>({});
+    const nameInputRef = useRef<TextInput>(null);
     const urlInputRef = useRef<TextInput>(null);
 
     useImperativeHandle(ref, () => ({
       setInputValue: (value: string) => {
-        setUrlInput(value);
+        // 写入当前聚焦的输入框；TV 上用户可先用遥控器聚焦名称或地址框再远程输入
+        if (focusedInput === "name") setNameInput(value);
+        else setUrlInput(value);
         onChanged();
       },
     }));
 
     const markChanged = () => onChanged();
+
+    // TV 遥控器：本区块获得焦点时按 OK/select 进入地址输入框，
+    // 地址框已聚焦时再按 OK 切换到名称框，方便用手机远程输入。
+    const handleTVEvent = React.useCallback(
+      (event: any) => {
+        if (!isSectionFocused) return;
+        if (event.eventType === "select") {
+          if (focusedInput === "url") {
+            urlInputRef.current?.focus();
+          } else {
+            nameInputRef.current?.focus();
+          }
+        }
+      },
+      [isSectionFocused, focusedInput]
+    );
+    useTVEventHandler(handleTVEvent);
 
     const resetForm = () => {
       setEditingId(null);
@@ -93,7 +118,8 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
       setEditingId(source.id);
       setNameInput(source.name);
       setUrlInput(source.url);
-      urlInputRef.current?.focus();
+      setFocusedInput("url");
+      setTimeout(() => urlInputRef.current?.focus(), 0);
     };
 
     const handleDelete = (source: M3uSource) => {
@@ -134,6 +160,9 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
     const isBindingTarget = (slot: "tv" | "mtv", source: M3uSource) =>
       liveBindings[slot] === source.id;
 
+    // 是否显示远程输入提示（TV / 平板等非手机端）
+    const showRemoteHint = deviceType !== "mobile" && remoteInputEnabled && serverUrl;
+
     return (
       <SettingsSection
         focusable
@@ -149,6 +178,11 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
         <ThemedText style={styles.hint}>
           管理多个 M3U 源，并分别为首页 TV / MTV 入口指定要加载的源。
         </ThemedText>
+        {showRemoteHint && (
+          <ThemedText style={styles.remoteHint}>
+            遥控器无法直接输入时，用手机访问 {serverUrl} 远程输入地址。
+          </ThemedText>
+        )}
 
         {/* 入口绑定区 */}
         <View style={styles.bindBlock}>
@@ -274,24 +308,36 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
         <View style={styles.formBlock}>
           <ThemedText style={styles.subTitle}>{editingId ? "编辑直播源" : "新增直播源"}</ThemedText>
           <TextInput
-            style={styles.input}
+            ref={nameInputRef}
+            style={[styles.input, focusedInput === "name" && isSectionFocused && styles.inputFocused]}
             value={nameInput}
             onChangeText={setNameInput}
+            onFocus={() => {
+              setFocusedInput("name");
+              setIsSectionFocused(true);
+              onFocus?.();
+            }}
             placeholder="名称（选填，如：央视源）"
             placeholderTextColor="#888"
             autoCorrect={false}
           />
           <TextInput
             ref={urlInputRef}
-            style={styles.input}
+            style={[styles.input, focusedInput === "url" && isSectionFocused && styles.inputFocused]}
             value={urlInput}
             onChangeText={setUrlInput}
-            placeholder="输入 M3U 地址（http/https）"
+            onFocus={() => {
+              setFocusedInput("url");
+              setIsSectionFocused(true);
+              onFocus?.();
+            }}
+            placeholder="https://example.com/live.m3u8"
             placeholderTextColor="#888"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
-            onFocus={() => setIsSectionFocused(true)}
+            returnKeyType="done"
+            onSubmitEditing={handleSaveSource}
           />
           <View style={styles.formActions}>
             <StyledButton
@@ -329,6 +375,11 @@ const styles = StyleSheet.create({
   hint: {
     fontSize: 12,
     color: "#9BA1A6",
+    marginBottom: 12,
+  },
+  remoteHint: {
+    fontSize: 12,
+    color: Colors.dark.primary,
     marginBottom: 12,
   },
   subTitle: {
@@ -423,6 +474,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a2a2c",
     color: "white",
     marginBottom: 8,
+  },
+  inputFocused: {
+    borderColor: Colors.dark.primary,
   },
   formActions: {
     flexDirection: "row",

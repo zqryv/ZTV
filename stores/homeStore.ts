@@ -30,10 +30,10 @@ export interface Category {
 }
 
 const initialCategories: Category[] = [
-  { title: "最近播放", type: "record" },
-  // 直播入口：点击后直接进入直播页，加载对应槽位绑定的 M3U 源
+  // 直播入口置顶：点击后直接进入直播页，加载对应槽位绑定的 M3U 源
   { title: "TV", type: "live", slot: "tv" },
   { title: "MTV", type: "live", slot: "mtv" },
+  { title: "最近播放", type: "record" },
   { title: "热门剧集", type: "tv", tag: "热门" },
   { title: "电视剧", type: "tv", tags: ["国产剧", "美剧", "英剧", "韩剧", "日剧", "港剧", "日本动画", "动画"] },
   {
@@ -102,7 +102,8 @@ const dataCache = new Map<string, CacheItem>();
 
 const useHomeStore = create<HomeState>((set, get) => ({
   categories: initialCategories,
-  selectedCategory: initialCategories[0],
+  // 默认选中第一个内容分类，避免默认落在直播入口（直播入口只作为跳转按钮）
+  selectedCategory: initialCategories.find((c) => c.type !== "live") || initialCategories[0],
   contentData: [],
   loading: true,
   loadingMore: false,
@@ -287,6 +288,8 @@ const useHomeStore = create<HomeState>((set, get) => ({
   },
 
   selectCategory: (category: Category) => {
+    // 直播入口不是内容分类，只用于跳转，不参与内容加载
+    if (!category || category.type === "live") return;
     const currentCategory = get().selectedCategory;
     const cacheKey = getCacheKey(category);
 
@@ -335,7 +338,8 @@ const useHomeStore = create<HomeState>((set, get) => ({
         if (recordCategoryExists) {
           const newCategories = state.categories.filter((c) => c.type !== "record");
           if (state.selectedCategory.type === "record") {
-            get().selectCategory(newCategories[0] || null);
+            const fallback = newCategories.find((c) => c.type !== "live") || newCategories[0];
+            get().selectCategory(fallback || null);
           }
           return { categories: newCategories };
         }
@@ -348,12 +352,19 @@ const useHomeStore = create<HomeState>((set, get) => ({
     set((state) => {
       const recordCategoryExists = state.categories.some((c) => c.type === "record");
       if (hasRecords && !recordCategoryExists) {
-        return { categories: [initialCategories[0], ...state.categories] };
+        // 把「最近播放」放在直播入口 TV/MTV 之后，避免挤掉置顶的直播入口
+        const recordCategory = initialCategories.find((c) => c.type === "record");
+        if (!recordCategory) return {};
+        const liveCount = state.categories.filter((c) => c.type === "live").length;
+        const next = [...state.categories];
+        next.splice(liveCount, 0, recordCategory);
+        return { categories: next };
       }
       if (!hasRecords && recordCategoryExists) {
         const newCategories = state.categories.filter((c) => c.type !== "record");
         if (state.selectedCategory.type === "record") {
-          get().selectCategory(newCategories[0] || null);
+          const fallback = newCategories.find((c) => c.type !== "live") || newCategories[0];
+          get().selectCategory(fallback || null);
         }
         return { categories: newCategories };
       }
