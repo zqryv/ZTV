@@ -46,10 +46,32 @@ export const LIVE_SLOT_DESCRIPTIONS: Record<LiveSourceSlot, string> = {
   mtv: "首页 MTV 入口使用的直播源",
 };
 
+/**
+ * 内置默认直播源（开箱即用）。
+ * - TV：best-fan/iptv-sources 每日更新的中国大陆频道（CCTV / 卫视，236 个频道）。
+ * - MTV：Free-TV/IPTV 国际频道合集（2203 个频道）。
+ * 使用 GitHub raw 直链；用户可在「TV 源设置」中随时增改或改绑。
+ */
+export const BUILTIN_TV_SOURCE_ID = "builtin-tv-cn";
+export const BUILTIN_MTV_SOURCE_ID = "builtin-mtv-intl";
+
 export const DEFAULT_LIVE_SOURCES: LiveSourcesConfig = {
   version: 1,
-  sources: [],
-  bindings: { tv: null, mtv: null },
+  sources: [
+    {
+      id: BUILTIN_TV_SOURCE_ID,
+      name: "内置·央视卫视",
+      url: "https://raw.githubusercontent.com/best-fan/iptv-sources/main/cn_all.m3u8",
+      createdAt: 0,
+    },
+    {
+      id: BUILTIN_MTV_SOURCE_ID,
+      name: "内置·国际频道",
+      url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
+      createdAt: 0,
+    },
+  ],
+  bindings: { tv: BUILTIN_TV_SOURCE_ID, mtv: BUILTIN_MTV_SOURCE_ID },
 };
 
 /** 生成源 id（不依赖 crypto，兼容旧版 Android TV 的 Hermes 运行时） */

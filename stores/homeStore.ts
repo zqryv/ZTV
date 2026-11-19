@@ -30,9 +30,6 @@ export interface Category {
 }
 
 const initialCategories: Category[] = [
-  // 直播入口置顶：点击后直接进入直播页，加载对应槽位绑定的 M3U 源
-  { title: "TV", type: "live", slot: "tv" },
-  { title: "MTV", type: "live", slot: "mtv" },
   { title: "最近播放", type: "record" },
   { title: "热门剧集", type: "tv", tag: "热门" },
   { title: "电视剧", type: "tv", tags: ["国产剧", "美剧", "英剧", "韩剧", "日剧", "港剧", "日本动画", "动画"] },
@@ -59,6 +56,9 @@ const initialCategories: Category[] = [
   },
   { title: "综艺", type: "tv", tag: "综艺" },
   { title: "豆瓣 Top250", type: "movie", tag: "top250" },
+  // 直播入口置于分类末尾：点击后直接进入直播页，加载对应槽位绑定的 M3U 源
+  { title: "TV", type: "live", slot: "tv" },
+  { title: "MTV", type: "live", slot: "mtv" },
 ];
 
 // 添加缓存项接口
@@ -352,12 +352,12 @@ const useHomeStore = create<HomeState>((set, get) => ({
     set((state) => {
       const recordCategoryExists = state.categories.some((c) => c.type === "record");
       if (hasRecords && !recordCategoryExists) {
-        // 把「最近播放」放在直播入口 TV/MTV 之后，避免挤掉置顶的直播入口
+        // 把「最近播放」插到第一个非直播分类的位置（直播入口已移到末尾）
         const recordCategory = initialCategories.find((c) => c.type === "record");
         if (!recordCategory) return {};
-        const liveCount = state.categories.filter((c) => c.type === "live").length;
         const next = [...state.categories];
-        next.splice(liveCount, 0, recordCategory);
+        const firstContentIndex = next.findIndex((c) => c.type !== "live");
+        next.splice(firstContentIndex < 0 ? next.length : firstContentIndex, 0, recordCategory);
         return { categories: next };
       }
       if (!hasRecords && recordCategoryExists) {

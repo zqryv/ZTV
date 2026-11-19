@@ -374,6 +374,12 @@ export class LiveSourcesManager {
     } catch (error) {
       logger.info("Failed to migrate legacy m3uUrl:", error);
     }
+    // 没有旧配置：首次启动时落库内置默认源，之后用户可自由增删改。
+    try {
+      await this.save(DEFAULT_LIVE_SOURCES);
+    } catch (error) {
+      logger.info("Failed to persist default live sources:", error);
+    }
     return DEFAULT_LIVE_SOURCES;
   }
 

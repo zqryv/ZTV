@@ -31,6 +31,11 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
     const inputAnimationStyle = useButtonAnimation(isSectionFocused, 1.01);
     const deviceType = useResponsiveLayout().deviceType;
 
+    // 输入框始终以 https:// 开头：用户未配置时显示该前缀，直接输入域名即可组成完整地址。
+    // 注意 store 仍保持为空字符串，避免误把前缀当成有效地址发起请求。
+    const DEFAULT_SCHEME = "https://";
+    const displayUrl = apiBaseUrl || DEFAULT_SCHEME;
+
     const handleUrlChange = (url: string) => {
       setApiBaseUrl(url);
       onChanged();
@@ -96,7 +101,7 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
             <TextInput
               ref={inputRef}
               style={[styles.input, isInputFocused && styles.inputFocused]}
-              value={apiBaseUrl}
+              value={displayUrl}
               onChangeText={handleUrlChange}
               placeholder="https://example.com （或 IP:端口，如 192.168.1.5:3000）"
               placeholderTextColor="#888"
@@ -104,8 +109,8 @@ export const APIConfigSection = forwardRef<APIConfigSectionRef, APIConfigSection
               autoCorrect={false}
               onFocus={() => {
                 setIsInputFocused(true);
-                // 将光标移动到文本末尾
-                const end = apiBaseUrl.length;
+                // 将光标移动到文本末尾（位于 https:// 之后，方便直接输入域名）
+                const end = displayUrl.length;
                 setSelection({ start: end, end: end });
                 // 有时需要延迟一下，让系统先完成 focus 再设置 selection
                 //（在 Android 上更可靠）
