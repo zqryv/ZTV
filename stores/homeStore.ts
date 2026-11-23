@@ -22,12 +22,19 @@ export type RowItem = (SearchResult | PlayRecord) & {
 
 export interface Category {
   title: string;
-  type?: "movie" | "tv" | "record" | "live";
+  type?: "movie" | "tv" | "record" | "live" | "radio" | "music";
   /** 直播入口对应的槽位（仅 type === "live" 时有效） */
   slot?: LiveSourceSlot;
   tag?: string;
   tags?: string[];
 }
+
+/**
+ * 入口型分类：不加载点播内容，点击后跳转到对应的功能页。
+ * 包含直播（TV / MUSIC）、收音机、音乐播放。
+ */
+export const isEntryCategory = (category: Category | null | undefined): boolean =>
+  !!category && ["live", "radio", "music"].includes(category.type ?? "");
 
 const initialCategories: Category[] = [
   { title: "最近播放", type: "record" },
@@ -56,9 +63,11 @@ const initialCategories: Category[] = [
   },
   { title: "综艺", type: "tv", tag: "综艺" },
   { title: "豆瓣 Top250", type: "movie", tag: "top250" },
-  // 直播入口置于分类末尾：点击后直接进入直播页，加载对应槽位绑定的 M3U 源
+  // 功能入口分类：点击直接进入对应页面，不参与点播内容加载
+  { title: "音乐播放", type: "music" },
+  { title: "收音机", type: "radio" },
   { title: "TV", type: "live", slot: "tv" },
-  { title: "MTV", type: "live", slot: "mtv" },
+  { title: "MUSIC", type: "live", slot: "mtv" },
 ];
 
 // 添加缓存项接口
@@ -102,8 +111,8 @@ const dataCache = new Map<string, CacheItem>();
 
 const useHomeStore = create<HomeState>((set, get) => ({
   categories: initialCategories,
-  // 默认选中第一个内容分类，避免默认落在直播入口（直播入口只作为跳转按钮）
-  selectedCategory: initialCategories.find((c) => c.type !== "live") || initialCategories[0],
+  // 默认选中第一个内容分类，避免默认落在功能入口（入口只作为跳转按钮）
+  selectedCategory: initialCategories.find((c) => !isEntryCategory(c)) || initialCategories[0],
   contentData: [],
   loading: true,
   loadingMore: false,
@@ -146,8 +155,8 @@ const useHomeStore = create<HomeState>((set, get) => ({
     const { selectedCategory, pageStart, loadingMore, hasMore } = get();
     if (loadingMore || !hasMore) return;
 
-    // 直播入口不加载任何点播内容（页面由 index.tsx 直接跳转）
-    if (selectedCategory?.type === "live") {
+    // 功能入口不加载任何点播内容（页面由 index.tsx 直接跳转）
+    if (isEntryCategory(selectedCategory)) {
       set({ contentData: [], hasMore: false, loading: false });
       return;
     }
@@ -185,8 +194,12 @@ const useHomeStore = create<HomeState>((set, get) => ({
 
         set({ contentData: rowItems, hasMore: false });
       } else if (selectedCategory.type && selectedCategory.tag) {
+        // 上面已提前返回「最近播放」与功能入口分类（live/radio/music），
+        // 此处只剩豆瓣点播分类，显式收窄供 API 与缓存类型复用。
+        const contentType: "movie" | "tv" =
+          selectedCategory.type === "movie" ? "movie" : "tv";
         const result = await api.getDoubanData(
-          selectedCategory.type,
+          contentType,
           selectedCategory.tag,
           20,
           pageStart
@@ -221,7 +234,7 @@ const useHomeStore = create<HomeState>((set, get) => ({
           dataCache.set(cacheKey, {
             data: cacheItems,
             timestamp: Date.now(),
-            type: selectedCategory.type,
+            type: contentType,
             hasMore: true // 始终为 true，因为我们允许继续加载
           });
 
@@ -288,8 +301,8 @@ const useHomeStore = create<HomeState>((set, get) => ({
   },
 
   selectCategory: (category: Category) => {
-    // 直播入口不是内容分类，只用于跳转，不参与内容加载
-    if (!category || category.type === "live") return;
+    // 功能入口不是内容分类，只用于跳转，不参与内容加载
+    if (isEntryCategory(category)) return;
     const currentCategory = get().selectedCategory;
     const cacheKey = getCacheKey(category);
 
@@ -338,7 +351,7 @@ const useHomeStore = create<HomeState>((set, get) => ({
         if (recordCategoryExists) {
           const newCategories = state.categories.filter((c) => c.type !== "record");
           if (state.selectedCategory.type === "record") {
-            const fallback = newCategories.find((c) => c.type !== "live") || newCategories[0];
+            const fallback = newCategories.find((c) => !isEntryCategory(c)) || newCategories[0];
             get().selectCategory(fallback || null);
           }
           return { categories: newCategories };
@@ -352,18 +365,18 @@ const useHomeStore = create<HomeState>((set, get) => ({
     set((state) => {
       const recordCategoryExists = state.categories.some((c) => c.type === "record");
       if (hasRecords && !recordCategoryExists) {
-        // 把「最近播放」插到第一个非直播分类的位置（直播入口已移到末尾）
+        // 把「最近播放」插到第一个内容分类之前（功能入口固定在末尾）
         const recordCategory = initialCategories.find((c) => c.type === "record");
         if (!recordCategory) return {};
         const next = [...state.categories];
-        const firstContentIndex = next.findIndex((c) => c.type !== "live");
+        const firstContentIndex = next.findIndex((c) => !isEntryCategory(c));
         next.splice(firstContentIndex < 0 ? next.length : firstContentIndex, 0, recordCategory);
         return { categories: next };
       }
       if (!hasRecords && recordCategoryExists) {
         const newCategories = state.categories.filter((c) => c.type !== "record");
         if (state.selectedCategory.type === "record") {
-          const fallback = newCategories.find((c) => c.type !== "live") || newCategories[0];
+          const fallback = newCategories.find((c) => !isEntryCategory(c)) || newCategories[0];
           get().selectCategory(fallback || null);
         }
         return { categories: newCategories };

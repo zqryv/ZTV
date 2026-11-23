@@ -1,6 +1,6 @@
 import React, { useState, useRef, useImperativeHandle, forwardRef } from "react";
 import { View, TextInput, StyleSheet, Animated, Platform } from "react-native";
-import { useTVEventHandler } from "react-native";
+import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { ThemedText } from "@/components/ThemedText";
 import { SettingsSection } from "./SettingsSection";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -66,7 +66,7 @@ export const LiveStreamSection = forwardRef<LiveStreamSectionRef, LiveStreamSect
       [isSectionFocused]
     );
 
-    useTVEventHandler(handleTVEvent);
+    useSafeTVEventHandler(handleTVEvent);
 
 
         const [selection, setSelection] = useState<{ start: number; end: number }>({

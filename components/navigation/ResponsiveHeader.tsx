@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { DeviceUtils } from '@/utils/DeviceUtils';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors } from '@/constants/Colors';
 
 interface ResponsiveHeaderProps {
   title?: string;
@@ -41,7 +42,7 @@ const ResponsiveHeader: React.FC<ResponsiveHeaderProps> = ({
 
   return (
     <>
-      {Platform.OS === 'android' && <StatusBar backgroundColor="#1c1c1e" barStyle="light-content" />}
+      {Platform.OS === 'android' && <StatusBar backgroundColor={Colors.surface.raised} barStyle="light-content" />}
       <View style={dynamicStyles.container}>
         <View style={dynamicStyles.content}>
           {/* 左侧区域 */}
@@ -52,7 +53,7 @@ const ResponsiveHeader: React.FC<ResponsiveHeaderProps> = ({
                 style={dynamicStyles.backButton}
                 activeOpacity={0.7}
               >
-                <ArrowLeft size={20} color="#fff" strokeWidth={2} />
+                <ArrowLeft size={20} color={Colors.text.primary} strokeWidth={2} />
               </TouchableOpacity>
             )}
           </View>
@@ -81,10 +82,10 @@ const createStyles = (spacing: number, deviceType: string, insets: any) => {
   
   return StyleSheet.create({
     container: {
-      backgroundColor: '#1c1c1e',
+      backgroundColor: Colors.surface.raised,
       paddingTop: insets.top,
       borderBottomWidth: 1,
-      borderBottomColor: '#333',
+      borderBottomColor: Colors.surface.border,
       shadowColor: '#000',
       shadowOffset: {
         width: 0,
@@ -127,7 +128,7 @@ const createStyles = (spacing: number, deviceType: string, insets: any) => {
     title: {
       fontSize: DeviceUtils.getOptimalFontSize(deviceType === 'mobile' ? 18 : 20),
       fontWeight: '600',
-      color: '#fff',
+      color: Colors.text.primary,
     },
   });
 };

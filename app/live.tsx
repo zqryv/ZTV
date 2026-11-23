@@ -5,12 +5,12 @@ import {
   StyleSheet,
   ActivityIndicator,
   Modal,
-  useTVEventHandler,
   HWEvent,
   Text,
   Pressable,
   Platform,
 } from "react-native";
+import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import LivePlayer from "@/components/LivePlayer";
 import { fetchAndParseM3u, getPlayableUrl, Channel } from "@/services/m3u";
@@ -29,7 +29,7 @@ import { LIVE_SLOT_LABELS, isLiveSourceSlot, LiveSourceSlot } from "@/constants/
 export default function LiveScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ slot?: string }>();
-  // 当前入口槽位，默认 TV；上键在 TV / MTV 之间切换
+  // 当前入口槽位，默认 TV；上键在 TV / MUSIC 之间切换
   const [activeSlot, setActiveSlot] = useState<LiveSourceSlot>(() =>
     isLiveSourceSlot(params.slot) ? params.slot : "tv"
   );
@@ -151,7 +151,7 @@ export default function LiveScreen() {
     [channels, currentChannelIndex]
   );
 
-  // 上键：在 TV / MTV 之间切换
+  // 上键：在 TV / MUSIC 之间切换
   const switchSlot = useCallback(() => {
     const next: LiveSourceSlot = activeSlot === "tv" ? "mtv" : "tv";
     setActiveSlot(next);
@@ -176,7 +176,7 @@ export default function LiveScreen() {
     [changeChannel, isChannelListVisible, deviceType, switchSlot]
   );
 
-  useTVEventHandler(deviceType === 'tv' ? handleTVEvent : () => {});
+  useSafeTVEventHandler(deviceType === 'tv' ? handleTVEvent : () => {});
 
   // 动态样式
   const dynamicStyles = createResponsiveStyles(deviceType, spacing);
@@ -196,7 +196,7 @@ export default function LiveScreen() {
           : `请先在设置中添加 M3U 源，并将它绑定到 ${LIVE_SLOT_LABELS[activeSlot]} 入口，之后即可在这里观看直播。`}
       </ThemedText>
 
-      {/* 入口切换（TV / MTV） */}
+      {/* 入口切换（TV / MUSIC） */}
       <View style={dynamicStyles.slotSwitcher}>
         {(['tv', 'mtv'] as LiveSourceSlot[]).map((slot) => (
           <StyledButton
@@ -216,7 +216,7 @@ export default function LiveScreen() {
         style={dynamicStyles.emptyButton}
       />
       <ThemedText style={dynamicStyles.emptyHint}>
-        遥控器：左右换台 · 下键频道列表 · 上键切换 TV / MTV
+        遥控器：左右换台 · 下键频道列表 · 上键切换 TV / MUSIC
       </ThemedText>
     </View>
   );
@@ -229,7 +229,7 @@ export default function LiveScreen() {
         onPlaybackStatusUpdate={() => {}}
       />
 
-      {/* 顶部：入口标识与 TV / MTV 切换 */}
+      {/* 顶部：入口标识与 TV / MUSIC 切换 */}
       <View style={dynamicStyles.topBar}>
         <View style={dynamicStyles.slotSwitcher}>
           {(['tv', 'mtv'] as LiveSourceSlot[]).map((slot) => (

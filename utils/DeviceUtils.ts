@@ -6,11 +6,18 @@ export const DeviceUtils = {
    * 检测当前设备类型
    */
   getDeviceType(): DeviceType {
-    // if (Platform.isTV) return "tv";
+    // 真实电视设备优先（遥控器 10 英尺交互）
+    // 注意：测试环境 mock 的 Platform 可能不含 isTV，使用可选访问保证兼容
+    if ((Platform as any)?.isTV) return "tv";
 
     const { width } = Dimensions.get("window");
 
-    if (width >= 1024) return "tv";
+    // Web 容器即桌面端（Windows / Ubuntu / macOS，Electron + react-native-web）
+    if ((Platform as any)?.OS === "web") {
+      return width >= 768 ? "desktop" : "mobile";
+    }
+
+    if (width >= 1200) return "desktop";
     if (width >= 768) return "tablet";
     return "mobile";
   },
@@ -34,6 +41,13 @@ export const DeviceUtils = {
    */
   isTablet(): boolean {
     return this.getDeviceType() === "tablet";
+  },
+
+  /**
+   * 检测是否为桌面设备（Windows / Ubuntu / macOS）
+   */
+  isDesktop(): boolean {
+    return this.getDeviceType() === "desktop";
   },
 
   /**
@@ -72,13 +86,14 @@ export const DeviceUtils = {
    */
   getOptimalFontSize(baseSize: number): number {
     const deviceType = this.getDeviceType();
-    const scaleFactor = {
+    const scaleFactor: Record<DeviceType, number> = {
       mobile: 1.0,
       tablet: 1.1,
+      desktop: 1.15,
       tv: 1.25,
-    }[deviceType];
+    };
 
-    return Math.round(baseSize * scaleFactor);
+    return Math.round(baseSize * scaleFactor[deviceType]);
   },
 
   /**
@@ -86,13 +101,14 @@ export const DeviceUtils = {
    */
   getOptimalSpacing(baseSpacing: number): number {
     const deviceType = this.getDeviceType();
-    const scaleFactor = {
+    const scaleFactor: Record<DeviceType, number> = {
       mobile: 0.8,
       tablet: 1.0,
+      desktop: 1.2,
       tv: 1.5,
-    }[deviceType];
+    };
 
-    return Math.round(baseSpacing * scaleFactor);
+    return Math.round(baseSpacing * scaleFactor[deviceType]);
   },
 
   /**
@@ -127,12 +143,13 @@ export const DeviceUtils = {
   getAnimationDuration(baseDuration: number): number {
     const deviceType = this.getDeviceType();
     // TV端动画稍慢，更符合10英尺体验
-    const scaleFactor = {
+    const scaleFactor: Record<DeviceType, number> = {
       mobile: 1.0,
       tablet: 1.0,
+      desktop: 1.0,
       tv: 1.2,
-    }[deviceType];
+    };
 
-    return Math.round(baseDuration * scaleFactor);
+    return Math.round(baseDuration * scaleFactor[deviceType]);
   },
 };

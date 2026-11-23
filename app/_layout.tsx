@@ -90,6 +90,8 @@ export default function RootLayout() {
             {Platform.OS !== "web" && <Stack.Screen name="play" options={{ headerShown: false }} />}
             <Stack.Screen name="search" options={{ headerShown: false }} />
             <Stack.Screen name="live" options={{ headerShown: false }} />
+            <Stack.Screen name="music" options={{ headerShown: false }} />
+            <Stack.Screen name="radio" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="favorites" options={{ headerShown: false }} />
             <Stack.Screen name="+not-found" />

@@ -321,7 +321,7 @@ export class SearchHistoryManager {
 
 // --- LiveSourcesManager (Uses AsyncStorage) ---
 /**
- * 多直播源（TV / MTV）的持久化管理。
+ * 多直播源（TV / MUSIC）的持久化管理。
  * 负责：多源增删改、绑定关系、以及旧版单一 m3uUrl 的自动迁移。
  */
 export class LiveSourcesManager {
@@ -348,7 +348,7 @@ export class LiveSourcesManager {
   }
 
   /**
-   * 旧版迁移：把 AppSettings.m3uUrl 转成一个默认源，并同时绑定到 TV / MTV 槽位。
+   * 旧版迁移：把 AppSettings.m3uUrl 转成一个默认源，并同时绑定到 TV / MUSIC 槽位。
    * 迁移成功后写回新格式，旧字段保留（不删除）以防回滚。
    */
   static async migrateLegacyM3uUrl(): Promise<LiveSourcesConfig> {

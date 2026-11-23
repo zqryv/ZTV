@@ -115,11 +115,11 @@ const styles = StyleSheet.create({
     fontSize: Platform.isTV ? 18 : 16,
   },
   newVersion: {
-    color: "#00bb5e",
+    color: "#00E6A8",
     fontWeight: "bold",
   },
   latestVersion: {
-    color: "#00bb5e",
+    color: "#00E6A8",
     fontWeight: "500",
   },
   errorText: {

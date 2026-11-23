@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { StyleSheet, Switch, FlatList, Pressable, Animated } from "react-native";
-import { useTVEventHandler } from "react-native";
+import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { ThemedText } from "@/components/ThemedText";
 import { SettingsSection } from "./SettingsSection";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -55,7 +55,7 @@ export const VideoSourceSection: React.FC<VideoSourceSectionProps> = ({ onChange
     [isSectionFocused, focusedIndex, resources, handleToggle]
   );
 
-  useTVEventHandler(handleTVEvent);
+  useSafeTVEventHandler(handleTVEvent);
 
   const renderResourceItem = ({ item, index }: { item: { source: string; source_name: string }; index: number }) => {
     const isEnabled = videoSource.enabledAll || videoSource.sources[item.source];
@@ -73,7 +73,7 @@ export const VideoSourceSection: React.FC<VideoSourceSectionProps> = ({ onChange
           <Switch
             value={isEnabled}
             onValueChange={() => {}} // 禁用Switch的直接交互
-            trackColor={{ false: "#767577", true: "#007AFF" }}
+            trackColor={{ false: "#767577", true: "#00E6A8" }}
             thumbColor={isEnabled ? "#ffffff" : "#f4f3f4"}
             pointerEvents="none"
           />
@@ -134,8 +134,8 @@ const styles = StyleSheet.create({
   resourceFocused: {
     backgroundColor: "#3a3a3c",
     borderWidth: 2,
-    borderColor: "#007AFF",
-    shadowColor: "#007AFF",
+    borderColor: "#00E6A8",
+    shadowColor: "#00E6A8",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 10,

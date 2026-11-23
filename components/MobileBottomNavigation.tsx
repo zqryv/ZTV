@@ -1,10 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Home, Heart, Search, Settings, Tv } from 'lucide-react-native';
+import { Home, Heart, Search, Settings, Tv, Music2, Radio } from 'lucide-react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { DeviceUtils } from '@/utils/DeviceUtils';
+import { Colors } from '@/constants/Colors';
 
 interface NavigationItem {
   name: string;
@@ -14,37 +15,15 @@ interface NavigationItem {
 }
 
 const navigationItems: NavigationItem[] = [
-  {
-    name: 'home',
-    label: '首页',
-    icon: Home,
-    route: '/',
-  },
-  {
-    name: 'live',
-    label: '直播',
-    icon: Tv,
-    route: '/live',
-  },
-  {
-    name: 'search',
-    label: '搜索',
-    icon: Search,
-    route: '/search',
-  },
-  {
-    name: 'favorites',
-    label: '收藏',
-    icon: Heart,
-    route: '/favorites',
-  },
-  {
-    name: 'settings',
-    label: '设置',
-    icon: Settings,
-    route: '/settings',
-  },
+  { name: 'home', label: '首页', icon: Home, route: '/' },
+  { name: 'live', label: '直播', icon: Tv, route: '/live' },
+  { name: 'music', label: '音乐', icon: Music2, route: '/music' },
+  { name: 'radio', label: '收音机', icon: Radio, route: '/radio' },
+  { name: 'search', label: '搜索', icon: Search, route: '/search' },
+  { name: 'favorites', label: '收藏', icon: Heart, route: '/favorites' },
+  { name: 'settings', label: '设置', icon: Settings, route: '/settings' },
 ];
+
 
 interface MobileBottomNavigationProps {
   colorScheme?: 'light' | 'dark';
@@ -62,9 +41,10 @@ export const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
     return null;
   }
 
-  // 在手机端过滤掉直播 tab
-  const filteredNavigationItems = navigationItems.filter(item => 
-    responsiveConfig.deviceType !== 'mobile' || item.name !== 'live'
+  // 手机端底部胶囊导航只保留 5 个主项
+  const MOBILE_KEYS = ['home', 'live', 'music', 'search', 'settings'];
+  const filteredNavigationItems = navigationItems.filter(item =>
+    responsiveConfig.deviceType !== 'mobile' || MOBILE_KEYS.includes(item.name)
   );
 
   const handleNavigation = (route: string) => {
@@ -82,14 +62,15 @@ export const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
     return pathname.startsWith(route);
   };
 
-  const activeColor = colorScheme === 'dark' ? '#007AFF' : '#007AFF';
-  const inactiveColor = colorScheme === 'dark' ? '#8E8E93' : '#8E8E93';
-  const backgroundColor = colorScheme === 'dark' ? '#1C1C1E' : '#F2F2F7';
+  // 统一使用设计系统令牌：青绿主色 + 沉浸底色
+  const activeColor = Colors.brand.onAccent;
+  const inactiveColor = Colors.text.tertiary;
+  const backgroundColor = Colors.surface.raised;
 
   const dynamicStyles = StyleSheet.create({
     container: {
       backgroundColor,
-      borderTopColor: colorScheme === 'dark' ? '#38383A' : '#C6C6C8',
+      borderTopColor: Colors.surface.border,
     },
   });
 
@@ -102,12 +83,12 @@ export const MobileBottomNavigation: React.FC<MobileBottomNavigationProps> = ({
         return (
           <TouchableOpacity
             key={item.name}
-            style={styles.tabItem}
+            style={[styles.tabItem, isActive && styles.tabItemActive]}
             onPress={() => handleNavigation(item.route)}
             activeOpacity={0.7}
           >
             <IconComponent
-              size={24}
+              size={22}
               color={isActive ? activeColor : inactiveColor}
             />
             <ThemedText
@@ -140,8 +121,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
+    marginHorizontal: 2,
+    borderRadius: 22,
     minHeight: DeviceUtils.getMinTouchTargetSize(),
+  },
+  tabItemActive: {
+    backgroundColor: Colors.brand.accent,
   },
   tabLabel: {
     fontSize: 11,

@@ -5,11 +5,11 @@ let mainWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 720,
+    width: 1440,
+    height: 900,
     minWidth: 960,
     minHeight: 540,
-    backgroundColor: "#151718",
+    backgroundColor: "#0B0E13",
     title: "ZTV",
     webPreferences: {
       nodeIntegration: false,

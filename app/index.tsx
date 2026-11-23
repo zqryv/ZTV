@@ -6,9 +6,10 @@ import { ThemedText } from "@/components/ThemedText";
 import { api } from "@/services/api";
 import VideoCard from "@/components/VideoCard";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Search, Settings, LogOut, Heart } from "lucide-react-native";
+import { Search, Settings, LogOut, Heart, Music2, Radio, Tv, Zap } from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { StyledButton } from "@/components/StyledButton";
-import useHomeStore, { RowItem, Category } from "@/stores/homeStore";
+import useHomeStore, { RowItem, Category, isEntryCategory } from "@/stores/homeStore";
 import useAuthStore from "@/stores/authStore";
 import CustomScrollView from "@/components/CustomScrollView";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
@@ -138,10 +139,16 @@ export default function HomeScreen() {
   }, [loading, contentData.length, fadeAnim]);
 
   const handleCategorySelect = (category: Category) => {
-    // TV / MTV 入口：直接进入直播页，并携带槽位参数
-    if (category.type === "live" && category.slot) {
+    // 功能入口：直接进入对应页面（TV / MUSIC 携带槽位参数）
+    if (isEntryCategory(category)) {
       setSelectedTag(null);
-      router.push({ pathname: "/live", params: { slot: category.slot } });
+      if (category.type === "live" && category.slot) {
+        router.push({ pathname: "/live", params: { slot: category.slot } });
+      } else if (category.type === "music") {
+        router.push("/music");
+      } else if (category.type === "radio") {
+        router.push("/radio");
+      }
       return;
     }
     setSelectedTag(null);
@@ -157,15 +164,36 @@ export default function HomeScreen() {
   };
 
   const renderCategory = ({ item }: { item: Category }) => {
-    const isSelected = selectedCategory?.title === item.title;
+    const isSelected = !isEntryCategory(item) && selectedCategory?.title === item.title;
+    const isEntry = isEntryCategory(item);
+    // 功能入口用胶囊 + 品牌色图标，与内容分类在视觉上区分
+    const Icon =
+      item.type === "music" ? Music2 : item.type === "radio" ? Radio : item.type === "live" ? Tv : null;
     return (
       <StyledButton
-        text={item.title}
         onPress={() => handleCategorySelect(item)}
         isSelected={isSelected}
-        style={dynamicStyles.categoryButton}
-        textStyle={dynamicStyles.categoryText}
-      />
+        variant={isEntry ? "ghost" : "default"}
+        style={[dynamicStyles.categoryButton, isEntry && dynamicStyles.entryButton]}
+      >
+        <View style={dynamicStyles.categoryInner}>
+          {Icon && (
+            <Icon
+              size={deviceType === "tv" ? 18 : 14}
+              color={isEntry ? Colors.brand.accent : Colors.dark.text}
+            />
+          )}
+          <ThemedText
+            style={[
+              dynamicStyles.categoryText,
+              isEntry && dynamicStyles.entryText,
+              isSelected && dynamicStyles.categoryTextSelected,
+            ]}
+          >
+            {item.title}
+          </ThemedText>
+        </View>
+      </StyledButton>
     );
   };
 
@@ -204,31 +232,48 @@ export default function HomeScreen() {
 
     return (
       <View style={dynamicStyles.headerContainer}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <ThemedText style={dynamicStyles.headerTitle}>首页</ThemedText>
-          <Pressable android_ripple={Platform.isTV || deviceType !== 'tv'? { color: 'transparent' } : { color: Colors.dark.link }} style={{ marginLeft: 20 }} onPress={() => router.push({ pathname: "/live", params: { slot: "tv" } })}>
+        <View style={dynamicStyles.brandRow}>
+          <LinearGradient colors={["#00E6A8", "#00B884"]} style={dynamicStyles.brandMark}>
+            <Zap size={deviceType === "tv" ? 22 : 18} color={Colors.brand.onAccent} fill={Colors.brand.onAccent} />
+          </LinearGradient>
+          <View>
+            <ThemedText style={dynamicStyles.brandTitle}>ZTV</ThemedText>
+            <ThemedText style={dynamicStyles.brandSubtitle}>影视 · 直播 · 音乐</ThemedText>
+          </View>
+          <Pressable
+            android_ripple={Platform.isTV || deviceType !== "tv" ? { color: "transparent" } : { color: Colors.dark.link }}
+            style={dynamicStyles.liveQuick}
+            onPress={() => router.push({ pathname: "/live", params: { slot: "tv" } })}
+          >
             {({ focused }) => (
-              <ThemedText style={[dynamicStyles.headerTitle, { color: focused ? "white" : "grey" }]}>直播</ThemedText>
+              <View style={dynamicStyles.liveQuickInner}>
+                <View style={dynamicStyles.liveDot} />
+                <ThemedText style={[dynamicStyles.liveQuickText, { color: focused ? Colors.brand.accent : "#fff" }]}>
+                  直播
+                </ThemedText>
+              </View>
             )}
           </Pressable>
         </View>
         <View style={dynamicStyles.rightHeaderButtons}>
-          <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push("/favorites")} variant="ghost">
-            <Heart color={colorScheme === "dark" ? "white" : "black"} size={24} />
+          <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push("/music")} variant="ghost">
+            <Music2 color={Colors.brand.accent} size={22} />
           </StyledButton>
-          <StyledButton
-            style={dynamicStyles.iconButton}
-            onPress={() => router.push({ pathname: "/search" })}
-            variant="ghost"
-          >
-            <Search color={colorScheme === "dark" ? "white" : "black"} size={24} />
+          <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push("/radio")} variant="ghost">
+            <Radio color={Colors.brand.accent} size={22} />
+          </StyledButton>
+          <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push("/favorites")} variant="ghost">
+            <Heart color={Colors.text.secondary} size={22} />
+          </StyledButton>
+          <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push({ pathname: "/search" })} variant="ghost">
+            <Search color={Colors.text.secondary} size={22} />
           </StyledButton>
           <StyledButton style={dynamicStyles.iconButton} onPress={() => router.push("/settings")} variant="ghost">
-            <Settings color={colorScheme === "dark" ? "white" : "black"} size={24} />
+            <Settings color={Colors.text.secondary} size={22} />
           </StyledButton>
           {isLoggedIn && (
             <StyledButton style={dynamicStyles.iconButton} onPress={logout} variant="ghost">
-              <LogOut color={colorScheme === "dark" ? "white" : "black"} size={24} />
+              <LogOut color={Colors.text.secondary} size={22} />
             </StyledButton>
           )}
         </View>
@@ -254,6 +299,41 @@ export default function HomeScreen() {
       fontWeight: "bold",
       paddingTop: 16,
     },
+    brandRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    brandMark: {
+      width: deviceType === "tv" ? 46 : 38,
+      height: deviceType === "tv" ? 46 : 38,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    brandTitle: {
+      fontSize: deviceType === "tv" ? 28 : 22,
+      fontWeight: "800",
+      letterSpacing: 1,
+      color: "#fff",
+    },
+    brandSubtitle: {
+      fontSize: 11,
+      color: Colors.text.tertiary,
+      marginTop: 1,
+    },
+    liveQuick: {
+      marginLeft: 20,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: "rgba(255,59,71,0.12)",
+      borderWidth: 1,
+      borderColor: "rgba(255,59,71,0.35)",
+    },
+    liveQuickInner: { flexDirection: "row", alignItems: "center", gap: 6 },
+    liveQuickText: { fontSize: 13, fontWeight: "600" },
+    liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.brand.live },
     rightHeaderButtons: {
       flexDirection: "row",
       alignItems: "center",
@@ -269,14 +349,33 @@ export default function HomeScreen() {
       paddingHorizontal: spacing,
     },
     categoryButton: {
-      paddingHorizontal: deviceType === "tv" ? spacing / 4 : spacing / 2,
+      paddingHorizontal: deviceType === "tv" ? spacing / 3 : spacing * 0.75,
       paddingVertical: spacing / 2,
-      borderRadius: deviceType === "mobile" ? 6 : 8,
-      marginHorizontal: deviceType === "tv" ? spacing / 4 : spacing / 2, // TV端使用更小的间距
+      borderRadius: 20,
+      marginHorizontal: deviceType === "tv" ? spacing / 4 : spacing / 3,
+    },
+    categoryInner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    entryButton: {
+      borderWidth: 1,
+      borderColor: "rgba(0,230,168,0.35)",
+      backgroundColor: "rgba(0,230,168,0.06)",
     },
     categoryText: {
-      fontSize: deviceType === "mobile" ? 14 : 16,
+      fontSize: deviceType === "mobile" ? 14 : deviceType === "tv" ? 18 : 15,
       fontWeight: "500",
+      color: Colors.text.primary,
+    },
+    categoryTextSelected: {
+      color: Colors.brand.onAccent,
+      fontWeight: "700",
+    },
+    entryText: {
+      color: Colors.brand.accent,
+      fontWeight: "600",
     },
     contentContainer: {
       flex: 1,

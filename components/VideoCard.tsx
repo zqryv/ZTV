@@ -35,10 +35,12 @@ const VideoCard = React.forwardRef<any, VideoCardProps>((props, ref) => {
   switch (deviceType) {
     case 'mobile':
       return <VideoCardMobile {...props} ref={ref} />;
-    
+
     case 'tablet':
+    case 'desktop':
+      // 平板与桌面均为指针交互、中等密度，共用卡片实现
       return <VideoCardTablet {...props} ref={ref} />;
-    
+
     case 'tv':
     default:
       return <VideoCardTV {...props} ref={ref} />;

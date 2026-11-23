@@ -108,7 +108,7 @@ const createStyles = (spacing: number) => {
       borderRadius: 8,
     },
     activeTab: {
-      backgroundColor: 'rgba(64, 156, 255, 0.1)',
+      backgroundColor: 'rgba(0, 230, 168, 0.14)',
     },
     tabLabel: {
       fontSize: 11,

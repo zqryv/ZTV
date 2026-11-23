@@ -13,19 +13,29 @@ const ResponsiveNavigation: React.FC<ResponsiveNavigationProps> = ({ children })
 
   switch (deviceType) {
     case 'mobile':
-      // 移动端使用Tab容器包装children
+      // 手机端（iOS / Android 手机）使用底部 Tab 容器
       return <MobileTabContainer>{children}</MobileTabContainer>;
-    
+
     case 'tablet':
+      // 平板端（iPad / Android 平板）使用可折叠侧边栏
       return (
         <TabletSidebarNavigator>
           {children}
         </TabletSidebarNavigator>
       );
-    
+
+    case 'desktop':
+      // 桌面端（Windows / Ubuntu / macOS）同样使用侧边栏，
+      // 桌面宽度更大、以鼠标/键盘为主，侧边栏默认展开获得最高信息密度
+      return (
+        <TabletSidebarNavigator>
+          {children}
+        </TabletSidebarNavigator>
+      );
+
     case 'tv':
     default:
-      // TV端保持原有的Stack导航，不需要额外的导航容器
+      // TV 端（Apple TV / Android TV）保持 Stack 导航 + 遥控器焦点，无需额外容器
       return <>{children}</>;
   }
 };

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, ScrollView } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Home, Search, Heart, Settings, Tv, Menu, X } from 'lucide-react-native';
+import { Home, Search, Heart, Settings, Tv, Music2, Radio, Menu, X } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { DeviceUtils } from '@/utils/DeviceUtils';
@@ -17,8 +17,10 @@ interface SidebarItem {
 
 const sidebarItems: SidebarItem[] = [
   { key: 'home', label: '首页', icon: Home, route: '/', section: 'main' },
-  { key: 'search', label: '搜索', icon: Search, route: '/search', section: 'main' },
   { key: 'live', label: '直播', icon: Tv, route: '/live', section: 'main' },
+  { key: 'music', label: '音乐播放', icon: Music2, route: '/music', section: 'main' },
+  { key: 'radio', label: '收音机', icon: Radio, route: '/radio', section: 'main' },
+  { key: 'search', label: '搜索', icon: Search, route: '/search', section: 'main' },
   { key: 'favorites', label: '收藏', icon: Heart, route: '/favorites', section: 'user' },
   { key: 'settings', label: '设置', icon: Settings, route: '/settings', section: 'user' },
 ];
@@ -99,7 +101,7 @@ const TabletSidebarNavigator: React.FC<TabletSidebarNavigatorProps> = ({
               >
                 <IconComponent
                   size={20}
-                  color={isActive ? Colors.dark.primary : '#ccc'}
+                  color={isActive ? Colors.brand.accent : Colors.text.secondary}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
                 {!collapsed && (
@@ -164,9 +166,9 @@ const createStyles = (spacing: number, sidebarWidth: number, isPortrait: boolean
     },
     sidebar: {
       width: sidebarWidth,
-      backgroundColor: '#1c1c1e',
+      backgroundColor: Colors.surface.raised,
       borderRightWidth: 1,
-      borderRightColor: '#333',
+      borderRightColor: Colors.surface.border,
       zIndex: isPortrait ? 1000 : 1, // 在竖屏时提高层级
     },
     collapsedSidebar: {
@@ -178,7 +180,7 @@ const createStyles = (spacing: number, sidebarWidth: number, isPortrait: boolean
       paddingHorizontal: spacing,
       paddingVertical: spacing * 1.5,
       borderBottomWidth: 1,
-      borderBottomColor: '#333',
+      borderBottomColor: Colors.surface.border,
     },
     toggleButton: {
       width: minTouchTarget,
@@ -218,21 +220,23 @@ const createStyles = (spacing: number, sidebarWidth: number, isPortrait: boolean
       minHeight: minTouchTarget,
     },
     activeSidebarItem: {
-      backgroundColor: 'rgba(64, 156, 255, 0.15)',
+      backgroundColor: 'rgba(0, 230, 168, 0.14)',
+      borderLeftWidth: 3,
+      borderLeftColor: Colors.brand.accent,
     },
     sidebarItemLabel: {
       fontSize: 14,
-      color: '#ccc',
+      color: Colors.text.secondary,
       marginLeft: spacing,
       fontWeight: '500',
     },
     activeSidebarItemLabel: {
-      color: Colors.dark.primary,
-      fontWeight: '600',
+      color: Colors.brand.accent,
+      fontWeight: '700',
     },
     content: {
       flex: 1,
-      backgroundColor: '#000',
+      backgroundColor: Colors.surface.base,
     },
   });
 };

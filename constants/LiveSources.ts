@@ -1,9 +1,9 @@
 /**
- * 直播源（TV / MTV）相关的类型与常量定义。
+ * 直播源（TV / MUSIC）相关的类型与常量定义。
  *
  * 设计目标：
  * - 支持保存多个 M3U 源，每个源有独立的 id / 名称 / 地址。
- * - TV、MTV 两个首页入口各自绑定一个源（sourceId），互不影响。
+ * - TV、MUSIC 两个首页入口各自绑定一个源（sourceId），互不影响。
  * - 兼容旧版本：旧版只有一个 m3uUrl，迁移逻辑见 services/storage.ts。
  */
 
@@ -36,20 +36,24 @@ export interface M3uTestResult {
 
 export const LIVE_SOURCE_SLOTS: LiveSourceSlot[] = ["tv", "mtv"];
 
+/**
+ * 槽位显示名。内部标识仍为 "mtv"（保持与用户已保存绑定的兼容），
+ * 展示层统一为 MUSIC。
+ */
 export const LIVE_SLOT_LABELS: Record<LiveSourceSlot, string> = {
   tv: "TV",
-  mtv: "MTV",
+  mtv: "MUSIC",
 };
 
 export const LIVE_SLOT_DESCRIPTIONS: Record<LiveSourceSlot, string> = {
   tv: "首页 TV 入口使用的直播源",
-  mtv: "首页 MTV 入口使用的直播源",
+  mtv: "首页 MUSIC 入口使用的直播源",
 };
 
 /**
  * 内置默认直播源（开箱即用）。
  * - TV：best-fan/iptv-sources 每日更新的中国大陆频道（CCTV / 卫视，236 个频道）。
- * - MTV：Free-TV/IPTV 国际频道合集（2203 个频道）。
+ * - MUSIC：Free-TV/IPTV 国际频道合集（2203 个频道）。
  * 使用 GitHub raw 直链；用户可在「TV 源设置」中随时增改或改绑。
  */
 export const BUILTIN_TV_SOURCE_ID = "builtin-tv-cn";
@@ -66,7 +70,7 @@ export const DEFAULT_LIVE_SOURCES: LiveSourcesConfig = {
     },
     {
       id: BUILTIN_MTV_SOURCE_ID,
-      name: "内置·国际频道",
+      name: "内置·MUSIC 频道",
       url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
       createdAt: 0,
     },

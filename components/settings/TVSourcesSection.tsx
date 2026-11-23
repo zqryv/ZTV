@@ -6,8 +6,8 @@ import {
   ScrollView,
   Platform,
   Alert,
-  useTVEventHandler,
 } from "react-native";
+import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import Toast from "react-native-toast-message";
 import { ThemedText } from "@/components/ThemedText";
 import { StyledButton } from "@/components/StyledButton";
@@ -52,39 +52,55 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
     const [focusedInput, setFocusedInput] = useState<"name" | "url">("url");
     const [editingId, setEditingId] = useState<string | null>(null);
     const [nameInput, setNameInput] = useState("");
+    /** 地址可编辑部分（不含固定 https:// 前缀） */
     const [urlInput, setUrlInput] = useState("");
     const [testingId, setTestingId] = useState<string | null>(null);
     const [testResults, setTestResults] = useState<Record<string, M3uTestResult>>({});
     const nameInputRef = useRef<TextInput>(null);
     const urlInputRef = useRef<TextInput>(null);
 
+    /** 固定协议头：地址输入框永久显示该前缀，用户只需填写后半段 */
+    const URL_SCHEME = "https://";
+    /** 组合出完整地址；若用户粘贴了完整 URL 也兼容 */
+    const buildFullUrl = (suffix: string): string => {
+      const raw = suffix.trim();
+      if (!raw) return "";
+      return /^https?:\/\//i.test(raw) ? raw : `${URL_SCHEME}${raw}`;
+    };
+    /** 编辑已有源时拆掉协议头，只把后半段放进输入框 */
+    const stripScheme = (url: string): string => url.replace(/^https?:\/\//i, "");
+
     useImperativeHandle(ref, () => ({
       setInputValue: (value: string) => {
-        // 写入当前聚焦的输入框；TV 上用户可先用遥控器聚焦名称或地址框再远程输入
+        // 写入当前聚焦的输入框；TV 上可先用遥控器聚焦名称或地址框再远程输入
         if (focusedInput === "name") setNameInput(value);
-        else setUrlInput(value);
+        else setUrlInput(stripScheme(value));
         onChanged();
       },
     }));
 
     const markChanged = () => onChanged();
 
-    // TV 遥控器：本区块获得焦点时按 OK/select 进入地址输入框，
-    // 地址框已聚焦时再按 OK 切换到名称框，方便用手机远程输入。
+    // TV 遥控器：本区块获得焦点时，左右键在「名称 / 地址」两个输入框间切换聚焦，
+    // OK/select 进入当前选中的输入框，方便用手机远程输入名称或地址。
     const handleTVEvent = React.useCallback(
       (event: any) => {
         if (!isSectionFocused) return;
+        if (event.eventType === "left" || event.eventType === "right") {
+          const next = focusedInput === "name" ? "url" : "name";
+          setFocusedInput(next);
+          if (next === "name") nameInputRef.current?.focus();
+          else urlInputRef.current?.focus();
+          return;
+        }
         if (event.eventType === "select") {
-          if (focusedInput === "url") {
-            urlInputRef.current?.focus();
-          } else {
-            nameInputRef.current?.focus();
-          }
+          if (focusedInput === "url") urlInputRef.current?.focus();
+          else nameInputRef.current?.focus();
         }
       },
       [isSectionFocused, focusedInput]
     );
-    useTVEventHandler(handleTVEvent);
+    useSafeTVEventHandler(handleTVEvent);
 
     const resetForm = () => {
       setEditingId(null);
@@ -93,8 +109,8 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
     };
 
     const handleSaveSource = async () => {
-      const url = urlInput.trim();
-      if (!url) {
+      const url = buildFullUrl(urlInput);
+      if (!urlInput.trim()) {
         Toast.show({ type: "error", text1: "请输入 M3U 地址" });
         return;
       }
@@ -117,7 +133,7 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
     const handleEdit = (source: M3uSource) => {
       setEditingId(source.id);
       setNameInput(source.name);
-      setUrlInput(source.url);
+      setUrlInput(stripScheme(source.url));
       setFocusedInput("url");
       setTimeout(() => urlInputRef.current?.focus(), 0);
     };
@@ -176,7 +192,7 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
           TV 源设置
         </ThemedText>
         <ThemedText style={styles.hint}>
-          管理多个 M3U 源，并分别为首页 TV / MTV 入口指定要加载的源。
+          管理多个 M3U 源，并分别为首页 TV / MUSIC 入口指定要加载的源。
         </ThemedText>
         {showRemoteHint && (
           <ThemedText style={styles.remoteHint}>
@@ -276,7 +292,7 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
                         textStyle={styles.smallButtonText}
                       />
                       <StyledButton
-                        text="绑定 MTV"
+                        text="绑定 MUSIC"
                         variant="ghost"
                         onPress={() => handleBind("mtv", source.id)}
                         style={styles.smallButton}
@@ -306,39 +322,68 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
 
         {/* 新增 / 编辑表单 */}
         <View style={styles.formBlock}>
-          <ThemedText style={styles.subTitle}>{editingId ? "编辑直播源" : "新增直播源"}</ThemedText>
+          <View style={styles.formTitleRow}>
+            <ThemedText style={styles.subTitle}>{editingId ? "编辑直播源" : "新增直播源"}</ThemedText>
+            {/* 遥控器/触屏都可直接跳到名称框，确保「源名称」随时可输入、可编辑 */}
+            <StyledButton
+              text="输入/修改名称"
+              variant="ghost"
+              onPress={() => {
+                setFocusedInput("name");
+                setIsSectionFocused(true);
+                nameInputRef.current?.focus();
+              }}
+              style={styles.smallButton}
+              textStyle={styles.smallButtonText}
+            />
+          </View>
           <TextInput
             ref={nameInputRef}
             style={[styles.input, focusedInput === "name" && isSectionFocused && styles.inputFocused]}
             value={nameInput}
-            onChangeText={setNameInput}
+            onChangeText={(text) => {
+              setNameInput(text);
+              markChanged();
+            }}
             onFocus={() => {
               setFocusedInput("name");
               setIsSectionFocused(true);
               onFocus?.();
             }}
-            placeholder="名称（选填，如：央视源）"
+            placeholder="源名称（如：央视源、我的私人源）"
             placeholderTextColor="#888"
             autoCorrect={false}
+            returnKeyType="next"
+            onSubmitEditing={() => urlInputRef.current?.focus()}
           />
-          <TextInput
-            ref={urlInputRef}
-            style={[styles.input, focusedInput === "url" && isSectionFocused && styles.inputFocused]}
-            value={urlInput}
-            onChangeText={setUrlInput}
-            onFocus={() => {
-              setFocusedInput("url");
-              setIsSectionFocused(true);
-              onFocus?.();
-            }}
-            placeholder="https://example.com/live.m3u8"
-            placeholderTextColor="#888"
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            returnKeyType="done"
-            onSubmitEditing={handleSaveSource}
-          />
+          {/* 地址输入框：https:// 作为固定前缀常驻显示，仅后半段可编辑 */}
+          <View style={[styles.urlInputRow, focusedInput === "url" && isSectionFocused && styles.inputFocused]}>
+            <ThemedText style={styles.urlPrefix}>{URL_SCHEME}</ThemedText>
+            <TextInput
+              ref={urlInputRef}
+              style={styles.urlTextInput}
+              value={urlInput}
+              onChangeText={(text) => {
+                setUrlInput(stripScheme(text));
+                markChanged();
+              }}
+              onFocus={() => {
+                setFocusedInput("url");
+                setIsSectionFocused(true);
+                onFocus?.();
+              }}
+              placeholder="example.com/live.m3u8"
+              placeholderTextColor="#888"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              returnKeyType="done"
+              onSubmitEditing={handleSaveSource}
+            />
+          </View>
+          <ThemedText style={styles.formHint}>
+            名称与地址均可编辑；地址固定以 {URL_SCHEME} 开头，只需填写后面的域名与路径。
+          </ThemedText>
           <View style={styles.formActions}>
             <StyledButton
               text={editingId ? "保存修改" : "添加源"}
@@ -464,6 +509,12 @@ const styles = StyleSheet.create({
   formBlock: {
     marginTop: 4,
   },
+  formTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
   input: {
     height: 46,
     borderWidth: 1,
@@ -473,6 +524,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     backgroundColor: "#2a2a2c",
     color: "white",
+    marginBottom: 8,
+  },
+  urlInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    height: 46,
+    borderWidth: 1,
+    borderColor: "#444",
+    borderRadius: 8,
+    backgroundColor: "#2a2a2c",
+    marginBottom: 8,
+    overflow: "hidden",
+  },
+  urlPrefix: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.dark.primary,
+    paddingHorizontal: 12,
+    height: "100%",
+    textAlignVertical: "center",
+    borderRightWidth: 1,
+    borderRightColor: "#444",
+    backgroundColor: "rgba(0,230,168,0.08)",
+  },
+  urlTextInput: {
+    flex: 1,
+    height: "100%",
+    paddingHorizontal: 10,
+    fontSize: 14,
+    color: "white",
+  },
+  formHint: {
+    fontSize: 11,
+    color: "#9BA1A6",
     marginBottom: 8,
   },
   inputFocused: {

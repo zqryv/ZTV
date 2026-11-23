@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Platform } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Home, Search, Heart, Settings, Tv } from 'lucide-react-native';
+import { Home, Search, Heart, Settings, Tv, Music2, Radio } from 'lucide-react-native';
 import { Colors } from '@/constants/Colors';
 import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { DeviceUtils } from '@/utils/DeviceUtils';
@@ -15,11 +15,16 @@ interface TabItem {
 
 const tabs: TabItem[] = [
   { key: 'home', label: '首页', icon: Home, route: '/' },
-  { key: 'search', label: '搜索', icon: Search, route: '/search' },
   { key: 'live', label: '直播', icon: Tv, route: '/live' },
+  { key: 'music', label: '音乐', icon: Music2, route: '/music' },
+  { key: 'radio', label: '收音机', icon: Radio, route: '/radio' },
+  { key: 'search', label: '搜索', icon: Search, route: '/search' },
   { key: 'favorites', label: '收藏', icon: Heart, route: '/favorites' },
   { key: 'settings', label: '设置', icon: Settings, route: '/settings' },
 ];
+
+/** 手机端底部胶囊导航展示的项（其余入口由首页分类与顶部按钮进入） */
+const MOBILE_TAB_KEYS = ['home', 'live', 'music', 'search', 'settings'];
 
 interface MobileTabContainerProps {
   children: React.ReactNode;
@@ -30,9 +35,9 @@ const MobileTabContainer: React.FC<MobileTabContainerProps> = ({ children }) => 
   const pathname = usePathname();
   const { spacing, deviceType } = useResponsiveLayout();
   
-  // 在手机端过滤掉直播 tab
-  const filteredTabs = tabs.filter(tab => 
-    deviceType !== 'mobile' || tab.key !== 'live'
+  // 手机端底部胶囊导航只保留 5 个主项，其余入口走首页分类 / 顶部快捷按钮
+  const filteredTabs = tabs.filter(tab =>
+    deviceType !== 'mobile' || MOBILE_TAB_KEYS.includes(tab.key)
   );
   
   const handleTabPress = (route: string) => {
@@ -73,7 +78,7 @@ const MobileTabContainer: React.FC<MobileTabContainerProps> = ({ children }) => 
             >
               <IconComponent
                 size={20}
-                color={isActive ? Colors.dark.primary : '#888'}
+                color={isActive ? Colors.brand.onAccent : Colors.text.tertiary}
                 strokeWidth={isActive ? 2.5 : 2}
               />
               <Text style={[
@@ -100,43 +105,42 @@ const createStyles = (spacing: number) => {
     content: {
       flex: 1,
     },
+    // 胶囊悬浮底栏：沉浸底色 + 圆角，选中项为青绿实心胶囊
     tabBar: {
       flexDirection: 'row',
-      backgroundColor: '#1c1c1e',
+      backgroundColor: Colors.surface.raised,
       borderTopWidth: 1,
-      borderTopColor: '#333',
+      borderTopColor: Colors.surface.border,
       paddingTop: spacing / 2,
       paddingBottom: Platform.OS === 'ios' ? spacing * 2 : spacing,
-      paddingHorizontal: spacing,
+      paddingHorizontal: spacing / 2,
       shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: -2,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 10,
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 8,
+      elevation: 12,
     },
     tab: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: minTouchTarget,
-      paddingVertical: spacing / 2,
-      borderRadius: 8,
+      paddingVertical: spacing / 3,
+      marginHorizontal: 2,
+      borderRadius: 22,
     },
     activeTab: {
-      backgroundColor: 'rgba(64, 156, 255, 0.1)',
+      backgroundColor: Colors.brand.accent,
     },
     tabLabel: {
       fontSize: 11,
-      color: '#888',
+      color: Colors.text.tertiary,
       marginTop: 2,
       fontWeight: '500',
     },
     activeTabLabel: {
-      color: Colors.dark.primary,
-      fontWeight: '600',
+      color: Colors.brand.onAccent,
+      fontWeight: '700',
     },
   });
 };
