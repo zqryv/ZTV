@@ -67,8 +67,13 @@ yarn typecheck       # TypeScript 类型检查
 | Android 手机/平板 | `ZTV-v{version}-android.apk` | 直接安装，允许「未知来源」 |
 | Ubuntu（x86_64） | `ZTV-v{version}-linux-amd64.deb` | `sudo apt install ./ZTV-v{version}-linux-amd64.deb` |
 | Windows（x86_64） | `ZTV-v{version}-windows-setup.exe` | 双击安装 |
+| macOS（Intel / Apple Silicon 通用） | `ZTV-v{version}-macos-universal.dmg` | 双击挂载，拖入「应用程序」；首次打开若提示，右键→打开 |
+| iOS（iPhone / iPad） | `ZTV-v{version}-ios-xcode-project.zip` | 解压后用 Xcode 打开 `ios/ZTV.xcworkspace`，个人 Apple ID 免费签名即可安装到自己的设备；付费开发者账号可上架 App Store |
+| iOS 真机 IPA（可选） | `ZTV-v{version}-ios.ipa` | 配置 `EXPO_TOKEN` 等 EAS 凭证后由 CI 自动签名构建 |
 
-> 说明：本项目为 React Native TVOS 应用，原生支持 Android TV / Apple TV。Windows 与 Ubuntu 安装包通过 Web 版（react-native-web）+ Electron 封装提供，用于在大屏/电脑上体验界面；直播播放能力以 Android TV 版为准。构建脚本见 `.github/workflows/release.yml`。
+> 说明：本项目为 React Native TVOS 应用，原生支持 Android TV / Apple TV。Windows / Ubuntu / macOS 安装包通过 Web 版（react-native-web）+ Electron 封装提供，用于在大屏/电脑上体验界面；直播播放能力以 Android TV 版为准。
+>
+> **关于 iOS 真机包**：按 Apple 规定，iOS 应用必须由开发者证书签名才能安装到真机，无法像 Android 那样直接分发未签名 IPA。因此默认交付可直接编译的 Xcode 工程源码，你用自己的 Apple ID 即可免费签名安装（个人签名 7 天有效，需每 7 天重签）。若希望 CI 直接产出已签名的 `.ipa`，在仓库 Settings → Secrets and variables → Actions 中配置 `EXPO_TOKEN`（Expo 账号令牌），并将 Variables 中的 `ENABLE_IOS_EAS` 设为 `true`，构建流程会自动增加 EAS 真机 IPA 产物。构建脚本见 `.github/workflows/release.yml`。
 
 ## 🔄 自动更新
 

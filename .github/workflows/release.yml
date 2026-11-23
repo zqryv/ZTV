@@ -1,6 +1,9 @@
 name: ZTV Release (all platforms)
 
-# 手动触发或推送 v* 标签时构建四个平台的安装包，并发布到 GitHub Release。
+# 手动触发或推送 v* 标签时构建各平台安装包，并发布到 GitHub Release。
+# 产物：Android TV / Android 手机 / Windows / Ubuntu / macOS(.dmg) / iOS Xcode 工程。
+# iOS 真机 IPA 需 Apple 签名：配置 EXPO_TOKEN + APPLE_ID/ASC_API_KEY 后，
+# 下方的 ios-ipa job 会自动构建；未配置时该 job 跳过，仍交付 iOS 工程源码。
 # 部署到自己的仓库后，UpdateConfig.ts 中的仓库地址需与之保持一致。
 on:
   push:
@@ -87,7 +90,7 @@ jobs:
           path: artifacts/*.apk
 
   desktop:
-    name: Windows / Ubuntu installers
+    name: Desktop installers
     runs-on: ${{ matrix.os }}
     needs: version
     strategy:
@@ -102,6 +105,10 @@ jobs:
             script: dist:linux
             pattern: "desktop/release/*.deb"
             name: ubuntu
+          - os: macos-latest
+            script: dist:mac
+            pattern: "desktop/release/*.dmg"
+            name: macos
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -123,10 +130,77 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.pattern }}
 
+  ios-project:
+    name: iOS Xcode project (iPhone / iPad)
+    runs-on: macos-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Prebuild iOS (no EXPO_TV => iPhone/iPad, not tvOS)
+        # 关键：完全不设置 EXPO_TV。设为空串会让 config-tv 插件的 boolish 抛
+        # GetEnv.NoBoolean 错误；unset 才能保证生成普通 iOS 工程而非 tvOS。
+        run: |
+          unset EXPO_TV
+          npx expo prebuild --platform ios --clean
+      - name: CocoaPods
+        working-directory: ios
+        run: pod install --repo-update
+      - name: Package Xcode project
+        run: |
+          mkdir -p artifacts
+          cd ios
+          zip -r -q "../artifacts/ZTV-v${{ needs.version.outputs.version }}-ios-xcode-project.zip" \
+            . -x 'Pods/*' -x 'build/*' -x '*.xcuserdatad/*'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-project
+          path: artifacts/*.zip
+
+  ios-ipa:
+    name: iOS IPA (EAS, signed) — optional
+    runs-on: ubuntu-latest
+    needs: version
+    # 只有在仓库配置了 EXPO_TOKEN 后才运行；未配置时跳过，不影响其他平台发布。
+    if: ${{ vars.ENABLE_IOS_EAS == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+      - name: Build iOS IPA via EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          unset EXPO_TV
+          eas build --platform ios --profile production --non-interactive --output artifact.json
+      - name: Download IPA and stage
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          URL=$(node -p "require('./artifact.json').artifacts.buildUrl")
+          curl -L -H "Authorization: Bearer $EXPO_TOKEN" -o "artifacts/ZTV-v${{ needs.version.outputs.version }}-ios.ipa" "$URL"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: artifacts/*.ipa
+
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [version, android-tv, android, desktop]
+    needs: [version, android-tv, android, desktop, ios-project, ios-ipa]
+    if: ${{ always() && needs.android-tv.result == 'success' && needs.android.result == 'success' && needs.desktop.result == 'success' && needs.ios-project.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -145,6 +219,14 @@ jobs:
             - ZTV-v${{ needs.version.outputs.version }}-android.apk — Android 手机/平板
             - ZTV-v${{ needs.version.outputs.version }}-windows-setup.exe — Windows x64
             - ZTV-v${{ needs.version.outputs.version }}-linux-amd64.deb — Ubuntu x64
+            - ZTV-v${{ needs.version.outputs.version }}-macos-universal.dmg — macOS 苹果电脑（Intel / Apple Silicon 通用）
+            - ZTV-v${{ needs.version.outputs.version }}-ios-xcode-project.zip — iOS Xcode 工程（iPhone/iPad，需自行签名编译/上架）
+            - ZTV-v${{ needs.version.outputs.version }}-ios.ipa — iOS 真机安装包（配置 EAS 凭证后自动生成）
+
+            ### iOS 说明
+            iOS 真机安装包（IPA）按 Apple 规定必须由开发者证书签名。默认交付可直接用 Xcode 打开的工程源码，
+            下载后用个人 Apple ID 免费签名即可安装到自己的 iPhone/iPad，或用付费开发者账号上架 App Store。
+            如已在仓库配置 EXPO_TOKEN 开发者令牌，ios-ipa job 会自动产出已签名的真机 IPA。
           draft: false
           prerelease: false
           files: artifacts/*
