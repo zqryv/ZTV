@@ -200,9 +200,16 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   setOnlineTracks: (results) => {
+    // 先记录上一批在线结果的 id：替换后它们既不属于内置也不属于新结果，
+    // 若直接沿用 isCustomTrack 会被误判为「用户自定义」并重新混入列表
+    const previousOnlineIds = new Set(onlineTracks.map((t) => t.id));
     onlineTracks = results;
-    // 从现有列表里剔除旧的在线曲目（保留内置与自定义）
-    const custom = get().tracks.filter(isCustomTrack);
+    const custom = get().tracks.filter(
+      (t) =>
+        !BUILTIN_TRACKS.some((b) => b.id === t.id) &&
+        !previousOnlineIds.has(t.id) &&
+        !results.some((r) => r.id === t.id)
+    );
     const tracks = buildTracks(custom);
     const playlists = buildPlaylists(tracks);
     const prevCurrent = get().currentTrackId;
@@ -221,8 +228,14 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   setOnlineStations: (results) => {
+    const previousOnlineIds = new Set(onlineStations.map((s) => s.id));
     onlineStations = results;
-    const custom = get().stations.filter(isCustomStation);
+    const custom = get().stations.filter(
+      (s) =>
+        !BUILTIN_RADIO_STATIONS.some((b) => b.id === s.id) &&
+        !previousOnlineIds.has(s.id) &&
+        !results.some((r) => r.id === s.id)
+    );
     set({ stations: buildStations(custom) });
   },
 

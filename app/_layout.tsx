@@ -15,6 +15,7 @@ import { useUpdateStore, initUpdateStore } from "@/stores/updateStore";
 import { UpdateModal } from "@/components/UpdateModal";
 import { UPDATE_CONFIG } from "@/constants/UpdateConfig";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { useAudioLifecycle } from "@/hooks/useAudioLifecycle";
 import { DeviceUtils } from "@/utils/DeviceUtils";
 import Logger from '@/utils/Logger';
 
@@ -34,6 +35,9 @@ export default function RootLayout() {
   const { checkForUpdate, lastCheckTime } = useUpdateStore();
   const responsiveConfig = useResponsiveLayout();
   const autoCheckedRef = useRef(false);
+
+  // 全局音频生命周期：应用退后台 / 硬件返回时停止播放并释放资源
+  useAudioLifecycle();
 
   useEffect(() => {
     const initializeApp = async () => {

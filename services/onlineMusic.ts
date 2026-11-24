@@ -1,19 +1,19 @@
 /**
  * 在线音乐 / 在线电台服务。
  *
- * - 音乐：iTunes Search API（免费、无需密钥），用于「搜索最新音乐」。
- *   previewUrl 是 30~90 秒可直连试听音频，可直接交给 expo-av 播放。
- * - 电台：radio-browser.info（免费、无需密钥），用于按国家 / 分类加载在线广播。
+ * 参考 any-listen、MusicFree 的「多音源聚合 + 故障转移」思路：
+ * - 音乐源 A：iTunes Search API（免费、无密钥、CORS *），提供可直连的 30~90s 试听；
+ *   中国区商店当前恒返回 0 结果，因此按 地区 → 备用地区 依次回退；
+ * - 音乐源 B：radio-browser.info 的 24h 音乐电台（连续 MP3 流），
+ *   Apple 服务不可达时仍能浏览并播放真实音乐；
+ * - 电台：radio-browser 多镜像 + 只取 MP3 + hidebroken，失败时由页面用内置电台兜底。
  *
- * 设计原则：
- * - 所有请求带超时（AbortController），失败时抛错由页面降级到内置曲库。
- * - 纯数据转换层，不依赖任何 store；结果映射为项目内的 MusicTrack / RadioStation。
- * - Web / 桌面（react-native-web）与原生 React Native 均使用全局 fetch。
+ * 所有请求带超时（AbortController）；纯数据转换层，不依赖任何 store。
  */
 
 import { MusicTrack, RadioStation } from "@/constants/AudioLibrary";
 
-/** iTunes 国家码映射（用于「分国」浏览与搜索） */
+/** iTunes 国家码映射 */
 export const ITUNES_COUNTRY_CODES: Record<string, string> = {
   中国: "cn",
   欧美: "us",
@@ -21,7 +21,25 @@ export const ITUNES_COUNTRY_CODES: Record<string, string> = {
   韩国: "kr",
 };
 
-/** 风格 → iTunes 搜索关键词（用于「分类」浏览） */
+/**
+ * iTunes 地区回退链。
+ * 实测：country=cn 商店对任何关键词都返回 0（Apple Music 中国区不可用），
+ * 而华语歌曲多收录在 jp / us 商店；因此「中国」优先查 jp 再查 us。
+ */
+export const getCountryCandidates = (countryLabel: string): string[] => {
+  const chains: Record<string, string[]> = {
+    中国: ["jp", "us", "cn"],
+    欧美: ["us", "gb"],
+    日本: ["jp", "us"],
+    韩国: ["kr", "us", "jp"],
+    全部: ["us", "jp", "kr"],
+  };
+  const primary = ITUNES_COUNTRY_CODES[countryLabel];
+  const chain = chains[countryLabel] ?? (primary ? [primary, "us"] : ["us", "jp"]);
+  return Array.from(new Set([primary, ...chain].filter((c): c is string => !!c)));
+};
+
+/** 风格 → iTunes 搜索关键词 */
 export const GENRE_SEARCH_TERMS: Record<string, string> = {
   流行: "pop",
   摇滚: "rock",
@@ -41,13 +59,18 @@ export const RADIO_COUNTRY_CODES: Record<string, string> = {
   韩国: "KR",
 };
 
-/** radio-browser 分类标签映射 */
+/** radio-browser 分类标签映射（音乐页 / 收音机页共用） */
 export const RADIO_GENRE_TAGS: Record<string, string> = {
   流行: "pop",
   古典: "classical",
+  爵士: "jazz",
+  轻音乐: "ambient",
   怀旧: "oldies",
   节奏: "dance",
   新闻: "news",
+  摇滚: "rock",
+  电子: "electronic",
+  音乐: "music",
 };
 
 const DEFAULT_TIMEOUT = 12000;
@@ -59,7 +82,7 @@ const fetchJson = async <T,>(url: string, timeoutMs = DEFAULT_TIMEOUT): Promise<
   try {
     const response = await fetch(url, {
       signal: controller.signal as any,
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", "User-Agent": "ZTV/2.2 (open-source radio client)" },
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return (await response.json()) as T;
@@ -68,13 +91,21 @@ const fetchJson = async <T,>(url: string, timeoutMs = DEFAULT_TIMEOUT): Promise<
   }
 };
 
-/** 把十六进制颜色补全为 #RRGGBB */
-const normalizeColor = (raw?: string): string => {
-  if (!raw) return "#00E6A8";
-  let hex = raw.replace(/^#/, "");
-  if (hex.length === 3) hex = hex.split("").map((c) => c + c).join("");
-  return /^[0-9a-fA-F]{6}$/.test(hex) ? `#${hex}` : "#00E6A8";
+/** 只允许 https 且来自 Apple 音频域名的试听地址，避免混合内容与非音频链接 */
+export const normalizePreviewUrl = (raw?: string): string | null => {
+  if (!raw) return null;
+  let url = raw.trim().replace(/^http:\/\//i, "https://");
+  if (!/^https:\/\//i.test(url)) return null;
+  try {
+    const parsed = new URL(url);
+    if (!/(^|\.)itunes\.apple\.com$|\.mzstatic\.com$|\.apple\.com$/.test(parsed.hostname)) return null;
+    return url;
+  } catch {
+    return null;
+  }
 };
+
+const ACCENT_PALETTE = ["#00E6A8", "#7C8CFF", "#FFB86B", "#4FC3F7", "#C792EA", "#F48FB1", "#66BB6A"];
 
 interface ITunesResult {
   trackId?: number;
@@ -93,36 +124,79 @@ interface ITunesResponse {
   results?: ITunesResult[];
 }
 
-const ACCENT_PALETTE = ["#00E6A8", "#7C8CFF", "#FFB86B", "#4FC3F7", "#C792EA", "#F48FB1", "#66BB6A"];
-
 /** 把 iTunes 条目映射为 MusicTrack（仅保留有可播放试听地址的条目） */
-const mapITunesTrack = (r: ITunesResult, index: number, countryLabel: string): MusicTrack | null => {
-  if (!r.previewUrl || !r.trackName) return null;
+export const mapITunesTrack = (
+  r: ITunesResult,
+  index: number,
+  countryLabel: string
+): MusicTrack | null => {
+  const url = normalizePreviewUrl(r.previewUrl);
+  if (!url || !r.trackName) return null;
   const year = r.releaseDate ? r.releaseDate.slice(0, 4) : undefined;
   return {
     id: `itunes-${r.trackId ?? `${Date.now()}-${index}`}`,
     title: r.trackName,
     artist: r.artistName || "未知艺术家",
     album: r.collectionName,
-    url: r.previewUrl,
+    url,
     cover: r.artworkUrl100?.replace("100x100bb", "300x300bb"),
     accent: ACCENT_PALETTE[index % ACCENT_PALETTE.length],
     genre: r.primaryGenreName || undefined,
     country: countryLabel === "全部" ? "欧美" : countryLabel,
     year,
-    durationLabel: r.trackTimeMillis
-      ? `${String(Math.floor(r.trackTimeMillis / 60000)).padStart(2, "0")}:${String(
-          Math.floor((r.trackTimeMillis % 60000) / 1000)
-        ).padStart(2, "0")}`
-      : undefined,
-    lyrics: ["—— 在线试听（iTunes Preview）", `${r.trackName} · ${r.artistName}`],
+    source: "iTunes 在线试听",
+    durationLabel: "试听",
+    lyrics: ["—— 在线试听（iTunes Preview，约 30~90 秒）", `${r.trackName} · ${r.artistName}`],
   };
 };
 
+/** 按 id 去重，合并多地区结果 */
+const dedupeTracks = (items: MusicTrack[], limit: number): MusicTrack[] => {
+  const seen = new Set<string>();
+  const out: MusicTrack[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    out.push(item);
+    if (out.length >= limit) break;
+  }
+  return out;
+};
+
+/** 新歌优先：按发行年份倒序，无年份的排后面 */
+const sortByRelease = (items: MusicTrack[]): MusicTrack[] =>
+  [...items].sort((a, b) => (b.year || "").localeCompare(a.year || ""));
+
+/** 依次尝试多个地区商店，直到拿到足够结果 */
+const searchRegions = async (term: string, countryLabel: string, limit: number): Promise<MusicTrack[]> => {
+  const collected: MusicTrack[] = [];
+  let lastError: any = null;
+  for (const country of getCountryCandidates(countryLabel)) {
+    if (collected.length >= limit) break;
+    const params = new URLSearchParams({
+      term,
+      entity: "song",
+      limit: String(Math.min(Math.max(limit, 1), 100)),
+      country,
+    });
+    try {
+      const data = await fetchJson<ITunesResponse>(`https://itunes.apple.com/search?${params.toString()}`);
+      const mapped = (data.results || [])
+        .map((r, i) => mapITunesTrack(r, i, countryLabel))
+        .filter((t): t is MusicTrack => !!t);
+      collected.push(...mapped);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  if (collected.length === 0 && lastError) throw lastError;
+  return dedupeTracks(collected, limit);
+};
+
 /**
- * 搜索最新音乐（iTunes）。
+ * 搜索最新音乐（iTunes，多地区自动回退）。
  * @param keyword 搜索关键词（歌名 / 歌手，中英文均可）
- * @param countryLabel 国家/地区中文名（全部/中国/欧美/日本/韩国）
+ * @param countryLabel 国家/地区中文名
  * @param limit 返回数量
  */
 export const searchLatestMusic = async (
@@ -132,31 +206,18 @@ export const searchLatestMusic = async (
 ): Promise<MusicTrack[]> => {
   const term = keyword.trim();
   if (!term) return [];
-  const countryCode = ITUNES_COUNTRY_CODES[countryLabel];
-  const params = new URLSearchParams({
-    term,
-    entity: "song",
-    limit: String(Math.min(Math.max(limit, 1), 100)),
-    country: countryCode || "us",
-  });
-  const data = await fetchJson<ITunesResponse>(`https://itunes.apple.com/search?${params.toString()}`);
-  return (data.results || [])
-    .map((r, i) => mapITunesTrack(r, i, countryLabel))
-    .filter((t): t is MusicTrack => !!t);
+  return searchRegions(term, countryLabel, limit);
 };
 
-/**
- * 按音乐风格 + 国家浏览最新音乐。
- * @param genre 风格（全部时不加风格关键词）
- * @param countryLabel 国家/地区
- */
+/** 按音乐风格 + 国家浏览最新音乐（按发行年份倒序） */
 export const browseMusicByGenre = async (
   genre: string,
   countryLabel = "全部",
   limit = 30
 ): Promise<MusicTrack[]> => {
-  const keyword = GENRE_SEARCH_TERMS[genre] || "music";
-  return searchLatestMusic(keyword, countryLabel, limit);
+  const keyword = GENRE_SEARCH_TERMS[genre] || "new music";
+  const results = await searchRegions(keyword, countryLabel, limit);
+  return sortByRelease(results);
 };
 
 interface RadioBrowserStation {
@@ -165,33 +226,117 @@ interface RadioBrowserStation {
   url_resolved?: string;
   url?: string;
   country?: string;
+  countrycode?: string;
   tags?: string;
   codec?: string;
+  bitrate?: number;
   favicon?: string;
 }
 
-/** 把 radio-browser 条目映射为 RadioStation（仅保留可直连 http(s) 流） */
+/** 多镜像轮转，避免单节点不可用导致「没有电台」 */
+const RADIO_HOSTS = ["de1.api.radio-browser.info", "fi1.api.radio-browser.info", "at1.api.radio-browser.info"];
+
+const queryRadioBrowser = async (params: URLSearchParams, limit: number): Promise<RadioBrowserStation[]> => {
+  let lastError: any = null;
+  for (const host of RADIO_HOSTS) {
+    try {
+      const data = await fetchJson<RadioBrowserStation[]>(
+        `https://${host}/json/stations/search?${params.toString()}`,
+        DEFAULT_TIMEOUT
+      );
+      if (Array.isArray(data) && data.length > 0) return data.slice(0, limit * 2);
+      if (Array.isArray(data)) lastError = new Error("该目录未返回可用电台");
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError || new Error("在线电台目录不可用");
+};
+
+/** 只保留可直连的 https 流，排除 HLS（Web 端无 hls.js 时不可播） */
+const safeStreamUrl = (raw?: string): string | null => {
+  const url = (raw || "").trim();
+  if (!/^https:\/\//i.test(url)) return null;
+  if (/\.m3u8?(\?|$)/i.test(url) || /\.pls(\?|$)/i.test(url)) return null;
+  return url;
+};
+
 const mapRadioStation = (s: RadioBrowserStation, index: number, countryLabel: string): RadioStation | null => {
-  const url = (s.url_resolved || s.url || "").trim();
-  if (!/^https?:\/\//i.test(url)) return null;
+  const url = safeStreamUrl(s.url_resolved || s.url);
   const name = (s.name || "").trim();
-  if (!name) return null;
+  if (!url || !name) return null;
   const firstTag = (s.tags || "").split(",")[0]?.trim();
   return {
     id: `online-${s.stationuuid || `${Date.now()}-${index}`}`,
     name,
     category: firstTag || "在线",
-    country: countryLabel === "全部" ? s.country || "未知" : countryLabel,
-    description: `${s.codec || "在线"} · ${s.tags ? s.tags.split(",").slice(0, 2).join(" / ") : "网络电台"}`,
+    country: countryLabel === "全部" ? "欧美" : countryLabel,
+    description: `${s.codec || "在线"}${s.bitrate ? ` ${s.bitrate}k` : ""} · ${(s.tags || "网络电台").split(",").slice(0, 2).join(" / ")}`,
     url,
     accent: ACCENT_PALETTE[index % ACCENT_PALETTE.length],
+    codec: s.codec || undefined,
+    source: "radio-browser 在线目录",
+  };
+};
+
+/** 把在线电台映射为「音乐电台」曲目，作为音乐页的第二音源 */
+const mapMusicChannel = (s: RadioBrowserStation, index: number, countryLabel: string): MusicTrack | null => {
+  const url = safeStreamUrl(s.url_resolved || s.url);
+  const name = (s.name || "").trim();
+  if (!url || !name) return null;
+  const firstTag = (s.tags || "").split(",")[0]?.trim();
+  const favicon = /^https:\/\//i.test(s.favicon || "") ? s.favicon : undefined;
+  return {
+    id: `channel-${s.stationuuid || `${Date.now()}-${index}`}`,
+    title: name,
+    artist: `${countryLabel === "全部" ? s.country || "全球" : countryLabel} · 音乐电台`,
+    album: "24 小时不间断",
+    url,
+    cover: favicon,
+    accent: ACCENT_PALETTE[index % ACCENT_PALETTE.length],
+    genre: firstTag || "音乐",
+    country: countryLabel === "全部" ? "欧美" : countryLabel,
+    source: "radio-browser 音乐电台",
+    durationLabel: "LIVE",
+    isLive: true,
+    lyrics: ["—— 连续音乐直播流", "点击即可收听，退出页面会自动停止"],
   };
 };
 
 /**
- * 按国家 / 分类加载在线电台（radio-browser.info）。
- * 优先选 codec=MP3 且可直连的流，避免 AAC/HLS 在部分端不支持。
+ * 加载在线音乐电台（音乐页音源 B）。
+ * 关键词按电台名称查询；风格/国家映射为 radio-browser 标签与国家码。
  */
+export const fetchMusicChannels = async (
+  countryLabel = "全部",
+  genre = "全部",
+  limit = 30,
+  keyword = ""
+): Promise<MusicTrack[]> => {
+  const params = new URLSearchParams({
+    limit: String(Math.min(Math.max(limit, 1), 100)),
+    order: "clickcount",
+    reverse: "true",
+    hidebroken: "true",
+    codec: "MP3",
+  });
+  const code = RADIO_COUNTRY_CODES[countryLabel];
+  if (code) params.set("countrycode", code);
+  const tag = RADIO_GENRE_TAGS[genre];
+  if (tag) params.set("tag", tag);
+  const kw = keyword.trim();
+  if (kw) params.set("name", kw);
+
+  const raw = await queryRadioBrowser(params, limit);
+  const q = kw.toLowerCase();
+  const results = raw
+    .filter((s) => !q || (s.name || "").toLowerCase().includes(q))
+    .map((s, i) => mapMusicChannel(s, i, countryLabel))
+    .filter((t): t is MusicTrack => !!t);
+  return dedupeTracks(results, limit);
+};
+
+/** 按国家 / 分类加载在线电台（收音机页） */
 export const loadOnlineStations = async (
   countryLabel = "全部",
   category = "全部",
@@ -202,36 +347,21 @@ export const loadOnlineStations = async (
     order: "clickcount",
     reverse: "true",
     hidebroken: "true",
+    codec: "MP3",
   });
   const code = RADIO_COUNTRY_CODES[countryLabel];
   if (code) params.set("countrycode", code);
   const tag = RADIO_GENRE_TAGS[category];
   if (tag) params.set("tag", tag);
 
-  // 轮转多个镜像，避免单节点不可用
-  const hosts = ["de1.api.radio-browser.info", "fi1.api.radio-browser.info", "at1.api.radio-browser.info"];
-  let lastError: any = null;
-  for (const host of hosts) {
-    try {
-      const data = await fetchJson<RadioBrowserStation[]>(
-        `https://${host}/json/stations/search?${params.toString()}`,
-        12000
-      );
-      if (!Array.isArray(data)) continue;
-      const stations = data
-        .map((s, i) => mapRadioStation(s, i, countryLabel))
-        .filter((s): s is RadioStation => !!s);
-      // 优先 MP3 编码
-      stations.sort((a, b) => {
-        const aMp3 = a.description.startsWith("MP3") ? 0 : 1;
-        const bMp3 = b.description.startsWith("MP3") ? 0 : 1;
-        return aMp3 - bMp3;
-      });
-      return stations.slice(0, limit);
-    } catch (e) {
-      lastError = e;
-      // 尝试下一个镜像
-    }
-  }
-  throw lastError || new Error("在线电台加载失败");
+  const raw = await queryRadioBrowser(params, limit);
+  const stations = raw
+    .map((s, i) => mapRadioStation(s, i, countryLabel))
+    .filter((s): s is RadioStation => !!s);
+  stations.sort((a, b) => {
+    const aMp3 = /MP3/i.test(a.codec || "") ? 0 : 1;
+    const bMp3 = /MP3/i.test(b.codec || "") ? 0 : 1;
+    return aMp3 - bMp3;
+  });
+  return stations.slice(0, limit);
 };

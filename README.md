@@ -4,6 +4,15 @@
 
 ## ✨ ZTV 功能
 
+### v2.2.0 音乐播放 / 收音机重构与播放生命周期修复
+
+- **两个界面重新规划布局**：音乐页按「音源 → 搜索 → 筛选 → 正在播放 → 曲目列表」分层，大屏左侧列表 / 右侧固定播放器；收音机页按「正在收听 → 来源与筛选 → 电台列表」分层，卡片标注国家、分类、编码与来源。两页都新增醒目的「停止」操作与播放状态标识。
+- **修复音乐搜索框无法输入**：搜索框从折叠面板中移出、始终可见，补齐 `editable / focusable / showSoftInputOnFocus` 与明确高度；复用屏幕键盘并新增周杰伦、古典、爵士等**中文热词一键输入**，电视 / 机顶盒无需系统输入法即可搜索；键盘展开时暂停遥控器切歌按键，避免抢焦点。
+- **替换与补充可用在线音乐源**：移除已失效的 Google media-session 样例（403）等地址；新增「音乐电台」第二音源（radio-browser 24h MP3 流）与 6 条国内可直连的 24h 音乐流；iTunes 因中国区商店恒返回 0 结果，改为按「cn → jp → us」自动回退，中文歌曲搜索与「最新单曲」开箱即用。三级降级：最新单曲 → 音乐电台 → 内置曲库。
+- **内置可用广播电台**：收音机内置 **28 个实测可直连**的电台，覆盖中国 / 欧美 / 日本 / 韩国（蜻蜓 FM、NPO、Radio Paradise、SRG SSR、KEXP、NPR、Listen.moe 等），打开即可收听，不再依赖在线目录；刷新在线目录失败时自动保留内置电台。
+- **修复退出后后台继续播放**：参考 `react-native-track-player` 的 `stopWithApp` / `StopPlaybackAndRemoveNotification` 语义与 React Navigation 的失焦清理实践，落实四层保障：`staysActiveInBackground: false`、AppState 退后台立即 stop、页面 `useFocusEffect` 失焦卸载 Sound、硬件返回键与 Web 标签页隐藏时停止；另用 `playToken` 消除「退出后异步加载完成又响起来」的竞态，停止时一并复位音频会话。
+- **播放健壮性**：加载 12 秒超时、备用地址自动切换、移除 Web 端会触发 CORS 预检的自定义请求头；新增 `node scripts/verifyAudioSources.js` 音源体检脚本与 11 项音频/音源回归测试。
+
 ### v2.1.0 更新修复 / 鸿蒙与折叠屏适配 / 搜索键盘
 
 - **检查更新修复**：改为 **GitHub Releases API 优先**（直接读取最新 tag 与真实资源名），API 不可用时自动回退 raw.githubusercontent、GitHub raw 与 jsDelivr 三个镜像；请求带 8 秒超时，不再因单个镜像卡死而「检查失败」。下载链接按当前平台自动选择（TV / 手机 / 鸿蒙 / Windows / macOS / Linux / iOS），不再是写死的 Android TV 包。
@@ -57,7 +66,10 @@
 | `app/search.tsx`、`utils/pinyin.ts`、`constants/HotSearch.ts` | 首字母检索、热搜影视榜、A–Z 索引与点击快搜 |
 | `app/music.tsx`、`app/radio.tsx`、`constants/AudioLibrary.ts` | 音乐播放页（在线搜索/风格分国）、收音机页（在线电台/分国）、内置曲库/电台 |
 | `services/onlineMusic.ts` | iTunes 在线音乐搜索 + radio-browser 在线电台（带超时与镜像容错） |
-| `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态、自定义音源与在线结果持久化 |
+| `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态、自定义音源与在线结果持久化；播放超时、备用地址回退、停止释放资源 |
+| `hooks/useAudioLifecycle.ts`、`app/_layout.tsx` | 应用退后台 / 硬件返回 / Web 隐藏时停止播放并释放音频会话 |
+| `app/music.tsx`、`app/radio.tsx`、`constants/AudioLibrary.ts` | 两页布局重做、屏幕键盘输入、三音源聚合与降级、28 个内置可用电台 |
+| `scripts/verifyAudioSources.js`、`services/__tests__/*` | 音源真实可用性体检与音频生命周期 / 地区回退回归测试 |
 | `services/api.ts`、`stores/authStore.ts`、`components/PosterImage.tsx` | 请求超时、登录检查去重提速、海报代理优先加载 |
 | `constants/UpdateConfig.ts`、`services/updateService.ts`、`stores/updateStore.ts` | Releases API 优先 + 三镜像回退、按平台选包、浏览器下载兜底、版本比对修正 |
 | `components/settings/UpdateSection.tsx`、`components/UpdateModal.tsx` | 更新入口全平台可见、更新说明、平台提示与「浏览器下载」按钮 |
@@ -83,7 +95,7 @@ yarn typecheck       # TypeScript 类型检查
 
 ## 📦 各平台安装版本
 
-仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.1.0`）：
+仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.2.0`）：
 
 | 平台 | 资源文件 | 安装方式 |
 | --- | --- | --- |

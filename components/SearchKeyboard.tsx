@@ -26,6 +26,12 @@ interface SearchKeyboardProps {
   onSearch: () => void;
   onClear: () => void;
   onClose: () => void;
+  /** 可选：标题 / 提示语，供不同页面复用 */
+  title?: string;
+  hint?: string;
+  /** 可选：一键输入的热词（中文歌手 / 风格），解决遥控器无法输入中文的问题 */
+  quickTerms?: string[];
+  onQuickTerm?: (term: string) => void;
 }
 
 interface KeyButtonProps extends TouchableOpacityProps {
@@ -60,6 +66,10 @@ export function SearchKeyboard({
   onSearch,
   onClear,
   onClose,
+  title = "屏幕键盘",
+  hint = "输入拼音首字母即可搜中文片名，如 QYN → 庆余年",
+  quickTerms,
+  onQuickTerm,
 }: SearchKeyboardProps) {
   const [numeric, setNumeric] = useState(false);
   const { screenWidth, deviceForm, spacing } = useResponsiveLayout();
@@ -78,15 +88,28 @@ export function SearchKeyboard({
     <View style={[styles.container, { padding }]}>
       <View style={styles.header}>
         <View style={styles.headerTitle}>
-          <ThemedText style={styles.title}>屏幕键盘</ThemedText>
-          <ThemedText style={styles.hint}>
-            输入拼音首字母即可搜中文片名，如 QYN → 庆余年
-          </ThemedText>
+          <ThemedText style={styles.title}>{title}</ThemedText>
+          <ThemedText style={styles.hint}>{hint}</ThemedText>
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel="收起键盘">
           <X size={isTV ? 22 : 18} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
+
+      {!!quickTerms?.length && onQuickTerm && (
+        <View style={styles.quickRow}>
+          {quickTerms.map((term) => (
+            <TouchableOpacity
+              key={term}
+              onPress={() => onQuickTerm(term)}
+              activeOpacity={0.7}
+              style={styles.quickChip}
+            >
+              <ThemedText style={styles.quickChipText}>{term}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {rows.map((row, rowIndex) => (
         <View key={row} style={[styles.row, { marginBottom: gap }]}>
@@ -154,6 +177,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   closeButton: { padding: 6 },
+  quickRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 10,
+  },
+  quickChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,230,168,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(0,230,168,0.35)",
+  },
+  quickChipText: { fontSize: 12, color: Colors.brand.accent, fontWeight: "600" },
   row: {
     flexDirection: "row",
     justifyContent: "center",
