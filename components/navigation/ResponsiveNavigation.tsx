@@ -8,45 +8,39 @@ interface ResponsiveNavigationProps {
   children: React.ReactNode;
 }
 
+/**
+ * 统一导航容器：
+ * - 单屏手机 / 折叠态手机 → 底部 Tab（拇指可达）
+ * - 二折/三折展开态、平板、桌面 → 侧边栏（大屏信息密度）
+ * - 电视 / 机顶盒 → Stack + 遥控器焦点
+ */
 const ResponsiveNavigation: React.FC<ResponsiveNavigationProps> = ({ children }) => {
-  const { deviceType } = useResponsiveLayout();
+  const { deviceType, deviceForm, foldState } = useResponsiveLayout();
+
+  // 折叠屏完全折叠时强制底部 Tab，避免物理宽度抖动导致导航频繁切换
+  if (foldState === 'folded') {
+    return <MobileTabContainer>{children}</MobileTabContainer>;
+  }
+
+  // 机顶盒与电视共享遥控器交互，不套用触摸导航容器
+  if (deviceForm === 'setTopBox' || deviceType === 'tv') {
+    return <>{children}</>;
+  }
 
   switch (deviceType) {
     case 'mobile':
-      // 手机端（iOS / Android 手机）使用底部 Tab 容器
       return <MobileTabContainer>{children}</MobileTabContainer>;
 
     case 'tablet':
-      // 平板端（iPad / Android 平板）使用可折叠侧边栏
-      return (
-        <TabletSidebarNavigator>
-          {children}
-        </TabletSidebarNavigator>
-      );
-
     case 'desktop':
-      // 桌面端（Windows / Ubuntu / macOS）同样使用侧边栏，
-      // 桌面宽度更大、以鼠标/键盘为主，侧边栏默认展开获得最高信息密度
-      return (
-        <TabletSidebarNavigator>
-          {children}
-        </TabletSidebarNavigator>
-      );
-
-    case 'tv':
     default:
-      // TV 端（Apple TV / Android TV）保持 Stack 导航 + 遥控器焦点，无需额外容器
-      return <>{children}</>;
+      return <TabletSidebarNavigator>{children}</TabletSidebarNavigator>;
   }
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  content: { flex: 1 },
 });
 
 export default ResponsiveNavigation;

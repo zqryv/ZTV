@@ -1,7 +1,8 @@
 name: ZTV Release (all platforms)
 
 # 手动触发或推送 v* 标签时构建各平台安装包，并发布到 GitHub Release。
-# 产物：Android TV / Android 手机 / Windows / Ubuntu / macOS(.dmg) / iOS Xcode 工程。
+# 产物：Android TV / Android 手机 / Windows / Ubuntu / macOS(.dmg) / iOS Xcode 工程 /
+#       鸿蒙 NEXT 可安装 Web 包（PWA）。
 # iOS 真机 IPA 需 Apple 签名：配置 EXPO_TOKEN + APPLE_ID/ASC_API_KEY 后，
 # 下方的 ios-ipa job 会自动构建；未配置时该 job 跳过，仍交付 iOS 工程源码。
 # 部署到自己的仓库后，UpdateConfig.ts 中的仓库地址需与之保持一致。
@@ -130,6 +131,30 @@ jobs:
           name: ${{ matrix.name }}
           path: ${{ matrix.pattern }}
 
+  harmony-web:
+    name: HarmonyOS NEXT web package (PWA)
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+      - name: Export web bundle (含 manifest.json，含折叠屏/鸿蒙适配)
+        run: npx expo export --platform web --output-dir harmony-web-build
+      - name: Package web bundle
+        run: |
+          mkdir -p artifacts
+          cd harmony-web-build
+          zip -r -q "../artifacts/ZTV-v${{ needs.version.outputs.version }}-harmony-web.zip" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: harmony-web
+          path: artifacts/*.zip
+
   ios-project:
     name: iOS Xcode project (iPhone / iPad)
     runs-on: macos-latest
@@ -199,8 +224,8 @@ jobs:
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [version, android-tv, android, desktop, ios-project, ios-ipa]
-    if: ${{ always() && needs.android-tv.result == 'success' && needs.android.result == 'success' && needs.desktop.result == 'success' && needs.ios-project.result == 'success' }}
+    needs: [version, android-tv, android, desktop, harmony-web, ios-project, ios-ipa]
+    if: ${{ always() && needs.android-tv.result == 'success' && needs.android.result == 'success' && needs.desktop.result == 'success' && needs.harmony-web.result == 'success' && needs.ios-project.result == 'success' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -216,7 +241,8 @@ jobs:
             ZTV v${{ needs.version.outputs.version }}
 
             - ZTV-v${{ needs.version.outputs.version }}-android-tv.apk — Android TV（联想/乐视等）
-            - ZTV-v${{ needs.version.outputs.version }}-android.apk — Android 手机/平板
+            - ZTV-v${{ needs.version.outputs.version }}-android.apk — Android 手机/平板 / HarmonyOS 4.x（兼容 APK）
+            - ZTV-v${{ needs.version.outputs.version }}-harmony-web.zip — HarmonyOS NEXT / 三折叠屏 PWA 离线包（解压后用浏览器打开，可添加到桌面）
             - ZTV-v${{ needs.version.outputs.version }}-windows-setup.exe — Windows x64
             - ZTV-v${{ needs.version.outputs.version }}-linux-amd64.deb — Ubuntu x64
             - ZTV-v${{ needs.version.outputs.version }}-macos-universal.dmg — macOS 苹果电脑（Intel / Apple Silicon 通用）
@@ -227,6 +253,11 @@ jobs:
             iOS 真机安装包（IPA）按 Apple 规定必须由开发者证书签名。默认交付可直接用 Xcode 打开的工程源码，
             下载后用个人 Apple ID 免费签名即可安装到自己的 iPhone/iPad，或用付费开发者账号上架 App Store。
             如已在仓库配置 EXPO_TOKEN 开发者令牌，ios-ipa job 会自动产出已签名的真机 IPA。
+
+            ### 鸿蒙与折叠屏说明
+            - HarmonyOS 4.x / 荣耀 MagicOS：直接安装 android.apk，系统识别为鸿蒙兼容模式。
+            - HarmonyOS NEXT：下载 harmony-web.zip，解压后通过浏览器打开并可「添加到桌面」使用。
+            - 三折叠 / 二折叠 / 单屏手机 / 平板 / 电视 / 机顶盒：界面随窗口尺寸实时切换网格密度与导航样式。
           draft: false
           prerelease: false
           files: artifacts/*

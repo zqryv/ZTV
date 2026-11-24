@@ -1,0 +1,38 @@
+name: Bootstrap version tag
+
+# 当 main 上的 package.json 版本号变更时自动创建对应的 v* tag，
+# 由 release.yml 接管后续多平台构建与 Release 发布。
+# 这样通过 GitHub API / 网页提交代码也能完成发版，无需本地 git push tag。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "package.json"
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create v{version} tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create tag if missing
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "No version found in package.json" >&2
+            exit 1
+          fi
+          if git rev-parse "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists, skip."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+          echo "Created tag v$VERSION"

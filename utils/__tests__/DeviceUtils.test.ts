@@ -34,11 +34,18 @@ const setOS = (os: string) => {
   RN.Platform.OS = os;
 };
 
+// 切换 Platform.constants（鸿蒙 / 折叠屏型号识别）
+const setConstants = (constants: any) => {
+  const RN = require("react-native");
+  RN.Platform.constants = constants;
+};
+
 describe("DeviceUtils", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     setTV(false);
     setOS("ios");
+    setConstants(undefined);
   });
 
   describe("getDeviceType", () => {
@@ -283,6 +290,61 @@ describe("DeviceUtils", () => {
       setTV(true);
       mockedDimensions.get.mockReturnValue(makeSize(1920, 1080));
       expect(DeviceUtils.getAnimationDuration(300)).toBe(360);
+    });
+  });
+
+  describe("鸿蒙系统识别", () => {
+    it("应该识别鸿蒙 NEXT 原生环境", () => {
+      setOS("harmony");
+      expect(DeviceUtils.isHarmonyOS()).toBe(true);
+      expect(DeviceUtils.isHarmonyOSNext()).toBe(true);
+      expect(DeviceUtils.isHarmonyOSAndroid()).toBe(false);
+    });
+
+    it("应该识别 HarmonyOS 4.x 的 Android 兼容层", () => {
+      setOS("android");
+      setConstants({ Brand: "HUAWEI", Model: "Mate 60 Pro", Build: { DISPLAY: "HarmonyOS 4.0.0" } });
+      expect(DeviceUtils.isHarmonyOS()).toBe(true);
+      expect(DeviceUtils.isHarmonyOSAndroid()).toBe(true);
+      expect(DeviceUtils.isHarmonyOSNext()).toBe(false);
+    });
+
+    it("非华为设备不应误判为鸿蒙", () => {
+      setOS("android");
+      setConstants({ Brand: "XIAOMI", Model: "14", Build: { DISPLAY: "Android 14" } });
+      expect(DeviceUtils.isHarmonyOS()).toBe(false);
+    });
+  });
+
+  describe("折叠屏与机顶盒形态", () => {
+    it("应该识别二折屏折叠 / 展开状态", () => {
+      setOS("android");
+      setConstants({ Brand: "HUAWEI", Model: "Mate X5", Build: { DISPLAY: "HarmonyOS 4.0.0" } });
+      expect(DeviceUtils.getDeviceForm(420, 900)).toBe("foldable");
+      expect(DeviceUtils.getFoldState(420, 900)).toBe("folded");
+      expect(DeviceUtils.getDeviceForm(768, 900)).toBe("foldable");
+      expect(DeviceUtils.getFoldState(768, 900)).toBe("unfolded");
+    });
+
+    it("应该识别三折屏完全展开状态", () => {
+      setOS("android");
+      setConstants({ Brand: "HUAWEI", Model: "Mate XT", Build: { DISPLAY: "HarmonyOS 4.0.0" } });
+      expect(DeviceUtils.getDeviceForm(1032, 1464)).toBe("triFold");
+      expect(DeviceUtils.getFoldState(1032, 1464)).toBe("fullyUnfolded");
+    });
+
+    it("应该把小屏电视设备识别为机顶盒", () => {
+      setTV(true);
+      mockedDimensions.get.mockReturnValue(makeSize(1280, 720));
+      expect(DeviceUtils.getDeviceForm()).toBe("setTopBox");
+      expect(DeviceUtils.isSetTopBox()).toBe(true);
+    });
+
+    it("应该把大屏电视识别为 tv 形态", () => {
+      setTV(true);
+      mockedDimensions.get.mockReturnValue(makeSize(1920, 1080));
+      expect(DeviceUtils.getDeviceForm()).toBe("tv");
+      expect(DeviceUtils.isSetTopBox()).toBe(false);
     });
   });
 });

@@ -2,7 +2,7 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Platform, View, StyleSheet } from "react-native";
 import Toast from "react-native-toast-message";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -15,6 +15,7 @@ import { useUpdateStore, initUpdateStore } from "@/stores/updateStore";
 import { UpdateModal } from "@/components/UpdateModal";
 import { UPDATE_CONFIG } from "@/constants/UpdateConfig";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { DeviceUtils } from "@/utils/DeviceUtils";
 import Logger from '@/utils/Logger';
 
 const logger = Logger.withTag('RootLayout');
@@ -32,6 +33,7 @@ export default function RootLayout() {
   const { checkLoginStatus } = useAuthStore();
   const { checkForUpdate, lastCheckTime } = useUpdateStore();
   const responsiveConfig = useResponsiveLayout();
+  const autoCheckedRef = useRef(false);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -56,14 +58,19 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  // 检查更新
+  // 检查更新：Android / 兼容 Android 的鸿蒙设备静默检查，其余平台在设置页手动检查
   useEffect(() => {
-    if (loaded && UPDATE_CONFIG.AUTO_CHECK && Platform.OS === 'android') {
-      // 检查是否需要自动检查更新
-      const shouldCheck = Date.now() - lastCheckTime > UPDATE_CONFIG.CHECK_INTERVAL;
-      if (shouldCheck) {
-        checkForUpdate(true); // 静默检查
-      }
+    const canAutoCheck =
+      Platform.OS === 'android' ||
+      DeviceUtils.isHarmonyOSAndroid() ||
+      (Platform.OS as string) === 'harmony' ||
+      (Platform.OS as string) === 'ohos';
+    if (!loaded || !UPDATE_CONFIG.AUTO_CHECK || !canAutoCheck || autoCheckedRef.current) return;
+
+    const shouldCheck = Date.now() - lastCheckTime > UPDATE_CONFIG.CHECK_INTERVAL;
+    if (shouldCheck) {
+      autoCheckedRef.current = true;
+      checkForUpdate(true); // 静默检查，不打断用户
     }
   }, [loaded, lastCheckTime, checkForUpdate]);
 

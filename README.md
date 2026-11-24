@@ -4,6 +4,15 @@
 
 ## ✨ ZTV 功能
 
+### v2.1.0 更新修复 / 鸿蒙与折叠屏适配 / 搜索键盘
+
+- **检查更新修复**：改为 **GitHub Releases API 优先**（直接读取最新 tag 与真实资源名），API 不可用时自动回退 raw.githubusercontent、GitHub raw 与 jsDelivr 三个镜像；请求带 8 秒超时，不再因单个镜像卡死而「检查失败」。下载链接按当前平台自动选择（TV / 手机 / 鸿蒙 / Windows / macOS / Linux / iOS），不再是写死的 Android TV 包。
+- **更新兜底**：iOS / macOS / Windows / 鸿蒙 NEXT 无法应用内安装 APK，更新弹窗与设置页提供「浏览器下载 / 前往下载页面」直达 Release；下载失败也能一键跳转。版本比对兼容 `v2.1.0`、`release-2.1.0-beta.1` 等写法。
+- **鸿蒙系统支持**：识别 HarmonyOS NEXT（原生）与 HarmonyOS 4.x / 荣耀（Android 兼容层）。兼容层直接安装 Android APK；NEXT 发布可「添加到桌面」的 PWA 离线包（`*-harmony-web.zip`）。设置页新增「设备与显示」，实时展示系统、形态、折叠状态、屏幕尺寸与布局列数。
+- **多形态设备适配**：三折屏 / 二折屏 / 单屏手机 / 平板 / 电视 / 机顶盒 / 桌面按窗口宽度与硬件型号实时切换网格密度与导航容器；折叠、展开、横竖屏、窗口缩放立即重排。机顶盒使用遥控器焦点与更大卡片。
+- **搜索页重做**：顶部输入区加入「屏幕键盘」开关，内置 QWERTY + 数字符号键盘，点选字母即可输入拼音首字母（Q / Y / N → 庆余年），电视与机顶盒默认展开；热搜从 24 条扩充到 **71 条**，新增 TOP10 宫格、A–Z 索引与宽屏双列榜单；宽屏（折叠展开 / 平板 / 桌面）采用「左侧热搜 + 右侧结果」分栏。
+- **拼音表修正**：修复「长 / 感 / 隘」重复映射导致的首字母错误，补充「吒 / 仇 / 界 / 剑」。
+
 ### v2.0.1 分类统一 / 在线音乐电台 / 连接提速
 
 - **分类样式统一与更名**：首页功能入口（电视 / 音乐台 / 音乐播放 / 收音机）改为与「电影」完全一致的胶囊样式（去掉图标与描边）；`TV` 更名 `电视`、`MUSIC` 更名 `音乐台`，顺序调整为 **电视 → 音乐台 → 音乐播放 → 收音机**（内部槽位 id 保持 `tv`/`mtv`，已保存的绑定不受影响）。
@@ -50,6 +59,12 @@
 | `services/onlineMusic.ts` | iTunes 在线音乐搜索 + radio-browser 在线电台（带超时与镜像容错） |
 | `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态、自定义音源与在线结果持久化 |
 | `services/api.ts`、`stores/authStore.ts`、`components/PosterImage.tsx` | 请求超时、登录检查去重提速、海报代理优先加载 |
+| `constants/UpdateConfig.ts`、`services/updateService.ts`、`stores/updateStore.ts` | Releases API 优先 + 三镜像回退、按平台选包、浏览器下载兜底、版本比对修正 |
+| `components/settings/UpdateSection.tsx`、`components/UpdateModal.tsx` | 更新入口全平台可见、更新说明、平台提示与「浏览器下载」按钮 |
+| `utils/DeviceUtils.ts`、`hooks/useResponsiveLayout.ts`、`components/navigation/ResponsiveNavigation.tsx` | 鸿蒙识别、三折/二折/机顶盒形态识别、折叠态实时重排 |
+| `components/settings/DeviceInfoSection.tsx` | 设置页展示系统 / 形态 / 折叠状态 / 屏幕尺寸 / 布局列数 |
+| `components/SearchKeyboard.tsx`、`app/search.tsx`、`constants/HotSearch.ts` | 内置屏幕键盘、搜索页分栏重做、71 条热搜与 TOP10 宫格 |
+| `public/manifest.json`、`app/+html.tsx` | PWA 清单与安全区域适配，供鸿蒙 NEXT「添加到桌面」 |
 | `hooks/useSafeTVEventHandler.ts` | 跨平台 TV 遥控器事件安全封装 |
 | `constants/Colors.ts`、`components/navigation/*` | 设计系统令牌、四端导航与视觉统一 |
 | `services/m3u.ts` | 新增带超时的 `testM3uUrl` |
@@ -68,12 +83,14 @@ yarn typecheck       # TypeScript 类型检查
 
 ## 📦 各平台安装版本
 
-仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.0.1`）：
+仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.1.0`）：
 
 | 平台 | 资源文件 | 安装方式 |
 | --- | --- | --- |
 | Android TV（联想/乐视等） | `ZTV-v{version}-android-tv.apk` | U 盘拷贝或 adb `install -r` 安装；长按桌面图标设为启动器 |
 | Android 手机/平板 | `ZTV-v{version}-android.apk` | 直接安装，允许「未知来源」 |
+| 华为鸿蒙 4.x / 荣耀 MagicOS | `ZTV-v{version}-android.apk` | 兼容 Android 应用，直接安装；应用内自动识别为鸿蒙兼容模式 |
+| 华为鸿蒙 NEXT | `ZTV-v{version}-harmony-web.zip` | 解压后用浏览器打开，菜单「添加到桌面」即可全屏使用 |
 | Ubuntu（x86_64） | `ZTV-v{version}-linux-amd64.deb` | `sudo apt install ./ZTV-v{version}-linux-amd64.deb` |
 | Windows（x86_64） | `ZTV-v{version}-windows-setup.exe` | 双击安装 |
 | macOS（Intel / Apple Silicon 通用） | `ZTV-v{version}-macos-universal.dmg` | 双击挂载，拖入「应用程序」；首次打开若提示，右键→打开 |
@@ -86,7 +103,7 @@ yarn typecheck       # TypeScript 类型检查
 
 ## 🔄 自动更新
 
-设置页的「检查更新」从 `constants/UpdateConfig.ts` 中配置的 GitHub 仓库读取 `package.json` 版本号，并从对应版本的 Release 下载安装包。部署到自己的仓库后，把 `GITHUB_OWNER` / `GITHUB_REPO` 改成你的用户名与仓库名即可。
+设置页的「检查更新」优先请求 GitHub Releases API 读取最新 tag、更新说明与真实资源名；API 不可用（限流或网络问题）时依次回退 `raw.githubusercontent.com` → jsDelivr → `github.com/raw` 上的 `package.json`。下载链接根据设备形态自动选择：Android TV / 手机 / 鸿蒙兼容层走应用内 APK 安装；iOS / 桌面 / 鸿蒙 NEXT 自动打开对应 Release 下载页。所有平台均保留「浏览器下载」兜底。部署到自己的仓库后，把 `constants/UpdateConfig.ts` 中的 `GITHUB_OWNER` / `GITHUB_REPO` 改成你的用户名与仓库名即可。
 
 ## ⚠️ 免责声明
 

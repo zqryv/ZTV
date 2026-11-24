@@ -13,6 +13,7 @@ import { APIConfigSection } from "@/components/settings/APIConfigSection";
 import { TVSourcesSection, TVSourcesSectionRef } from "@/components/settings/TVSourcesSection";
 import { RemoteInputSection } from "@/components/settings/RemoteInputSection";
 import { UpdateSection } from "@/components/settings/UpdateSection";
+import { DeviceInfoSection } from "@/components/settings/DeviceInfoSection";
 // import { VideoSourceSection } from "@/components/settings/VideoSourceSection";
 import Toast from "react-native-toast-message";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
@@ -198,7 +199,12 @@ export default function SettingsScreen() {
       ),
       key: "tvsources",
     },
-    Platform.OS === "android" && {
+    {
+      component: <DeviceInfoSection />,
+      key: "device",
+    },
+    // 所有平台都提供更新入口：Android/鸿蒙可直接安装，其余平台打开浏览器下载
+    {
       component: <UpdateSection />,
       key: "update",
     },

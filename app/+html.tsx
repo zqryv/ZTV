@@ -7,14 +7,22 @@ import {type PropsWithChildren} from 'react';
  */
 export default function Root({children}: PropsWithChildren) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+        {/* viewport-fit=cover：三折屏 / 鸿蒙 NEXT 刘海与曲面边缘的安全区域由 RN SafeArea 处理 */}
         <meta
           name="viewport"
-          content="width=device-width, initial-scale=1, shrink-to-fit=no"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
+        <meta name="theme-color" content="#0B0E13" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="description" content="ZTV 全端视频直播、音乐播放与网络收音机" />
+        <link rel="manifest" href="/manifest.json" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
 
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
@@ -32,11 +40,10 @@ export default function Root({children}: PropsWithChildren) {
 }
 
 const responsiveBackground = `
-body {
-  background-color: #fff;
+html, body {
+  background-color: #0B0E13;
+  overscroll-behavior: none;
 }
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #000;
-  }
+input, textarea, button, select {
+  font-family: inherit;
 }`;

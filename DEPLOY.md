@@ -41,26 +41,32 @@ const GITHUB_REPO = "ZTV";
 发布流程：
 
 ```bash
-# 版本号与 package.json 保持一致（当前 1.0.0）
-git tag v1.0.0
-git push origin v1.0.0
+# 版本号与 package.json 保持一致（当前 2.1.0）
+git tag v2.1.0
+git push origin v2.1.0
 ```
 
 在仓库的 **Actions** 页签可看到构建进度；结束后在 **Releases** 页可下载：
 
 | 平台 | 资源文件 |
 | --- | --- |
-| Android TV | `ZTV-v1.0.0-android-tv.apk` |
-| Android 手机/平板 | `ZTV-v1.0.0-android.apk` |
-| Windows | `ZTV-v1.0.0-windows-setup.exe` |
-| Ubuntu | `ZTV-v1.0.0-linux-amd64.deb` |
+| Android TV | `ZTV-v2.1.0-android-tv.apk` |
+| Android 手机/平板 / 鸿蒙 4.x | `ZTV-v2.1.0-android.apk` |
+| 鸿蒙 NEXT（PWA） | `ZTV-v2.1.0-harmony-web.zip` |
+| Windows | `ZTV-v2.1.0-windows-setup.exe` |
+| Ubuntu | `ZTV-v2.1.0-linux-amd64.deb` |
+| macOS | `ZTV-v2.1.0-macos-universal.dmg` |
+| iOS | `ZTV-v2.1.0-ios-xcode-project.zip` |
 
 ## 4. 各平台安装方式
 
-- **Android TV（联想/乐视等 1.x+）**：U 盘拷贝 APK 到电视安装，或用 `adb install -r ZTV-v1.0.0-android-tv.apk`；安装后在「应用」里将 ZTV 设为启动器可开机自启。Leanback 启动项与横幅已保留。
-- **Android 手机/平板**：直接安装 APK，允许「未知来源」。
-- **Windows**：双击 `ZTV-v1.0.0-windows-setup.exe` 安装。
-- **Ubuntu**：`sudo apt install ./ZTV-v1.0.0-linux-amd64.deb`。
+- **Android TV（联想/乐视等 1.x+）**：U 盘拷贝 APK 到电视安装，或用 `adb install -r ZTV-v2.1.0-android-tv.apk`；安装后在「应用」里将 ZTV 设为启动器可开机自启。Leanback 启动项与横幅已保留。
+- **Android 手机/平板 / 鸿蒙 4.x**：直接安装 APK，允许「未知来源」。
+- **鸿蒙 NEXT**：解压 `ZTV-v2.1.0-harmony-web.zip`，用浏览器打开 `index.html`，通过菜单「添加到桌面」全屏使用。
+- **Windows**：双击 `ZTV-v2.1.0-windows-setup.exe` 安装。
+- **Ubuntu**：`sudo apt install ./ZTV-v2.1.0-linux-amd64.deb`。
+- **macOS**：双击 `.dmg` 拖入应用程序；首次打开右键选择「打开」。
+- **iOS**：解压 Xcode 工程 zip，用个人 Apple ID 免费签名安装真机。
 
 > Windows / Ubuntu 安装包由 `desktop/` 下的 Electron 外壳封装 react-native-web 导出物生成。受原生模块限制，桌面版的视频解码能力弱于 Android TV 版，主要用于大屏浏览与设置体验。
 

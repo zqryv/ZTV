@@ -1,12 +1,15 @@
-import { useState, useEffect } from "react";
-import { Dimensions, Platform } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Dimensions, Platform, useWindowDimensions } from "react-native";
+import { DeviceUtils, DeviceForm, FoldState } from "@/utils/DeviceUtils";
+
+export type { DeviceForm, FoldState } from "@/utils/DeviceUtils";
 
 /**
  * 设备形态（跨端统一）
- * - mobile : 手机（iOS / Android 手机）
- * - tablet : 平板（iPad / Android 平板）
+ * - mobile : 手机（iOS / Android / 鸿蒙手机，含折叠态）
+ * - tablet : 平板（iPad / Android 平板 / 鸿蒙平板）
  * - desktop: 桌面电脑（Windows / Ubuntu / macOS，Electron + react-native-web 容器）
- * - tv     : 电视（Apple TV / Android TV，遥控器 10 英尺交互）
+ * - tv     : 电视 / 机顶盒（Apple TV / Android TV，遥控器 10 英尺交互）
  */
 export type DeviceType = "mobile" | "tablet" | "desktop" | "tv";
 
@@ -19,44 +22,42 @@ export interface ResponsiveConfig {
   isPortrait: boolean;
   screenWidth: number;
   screenHeight: number;
+  /** 细粒度形态：三折屏 / 二折屏 / 单屏手机 / 平板 / 电视 / 机顶盒 / 桌面 */
+  deviceForm?: DeviceForm;
+  /** 折叠状态，随窗口尺寸变化实时更新 */
+  foldState?: FoldState;
+  isHarmonyOS?: boolean;
+  isHarmonyOSNext?: boolean;
+  isSetTopBox?: boolean;
 }
 
 const BREAKPOINTS = {
   mobile: { min: 0, max: 767 },
   tablet: { min: 768, max: 1199 },
   desktop: { min: 1200, max: Infinity },
-  // tv 不再用宽度判定：由 Platform.isTV 精确识别，避免宽屏桌面被误判为遥控器设备
   tv: { min: Infinity, max: Infinity },
 };
 
-/**
- * 设备形态识别
- * 优先级：真实 TV 平台 > Web 容器（桌面）> 屏幕宽度（手机/平板/桌面大屏）
- *
- * - Platform.isTV 精确识别 Apple TV / Android TV（react-native-tvos）
- * - Platform.OS === "web" 覆盖 Windows / Ubuntu / macOS 的 Electron + RN-Web 桌面壳
- * - 其余按宽度：平板横屏/桌面大屏走 desktop，获得多列侧边栏布局
- */
 const getDeviceType = (width: number): DeviceType => {
-  // 1) 真正的电视设备（遥控器 + 10 英尺交互）优先
-  if (Platform.isTV) return "tv";
-
-  // 2) Web 容器即桌面端（Electron 承载的 Windows / Ubuntu / macOS）
-  if (Platform.OS === "web") {
+  if (Platform_isTV()) return "tv";
+  if (Platform_OS() === "web") {
     return width >= BREAKPOINTS.tablet.min ? "desktop" : "mobile";
   }
-
-  // 3) 原生平台按宽度：大屏桌面/平板横屏 → desktop，平板 → tablet，其余 → mobile
   if (width >= BREAKPOINTS.desktop.min) return "desktop";
   if (width >= BREAKPOINTS.tablet.min) return "tablet";
   return "mobile";
 };
 
+// 集中读取 Platform，避免各处可选链重复；测试环境 mock 可能缺少字段
+const Platform_isTV = () => Boolean((Platform as any)?.isTV);
+const Platform_OS = () => String((Platform as any)?.OS ?? "");
+
 const getLayoutConfig = (
   deviceType: DeviceType,
   width: number,
   height: number,
-  isPortrait: boolean
+  isPortrait: boolean,
+  deviceForm: DeviceForm,
 ): ResponsiveConfig => {
   const spacing =
     deviceType === "mobile" ? 8 : deviceType === "tablet" ? 12 : deviceType === "desktop" ? 16 : 20;
@@ -65,37 +66,54 @@ const getLayoutConfig = (
   let cardWidth: number;
   let cardHeight: number;
 
-  switch (deviceType) {
-    case "mobile":
-      columns = isPortrait ? 3 : 4;
-      // 使用flex布局，卡片可以更大一些来填充空间
-      cardWidth = ((width - spacing) / columns) * 0.85; // 增大到85%
-      cardHeight = cardWidth * 1.2; // 5:6 aspect ratio (reduced from 2:3)
+  switch (deviceForm) {
+    case "triFold":
+      // 三折展开：接近小平板宽度，提升信息密度
+      columns = isPortrait ? 6 : 8;
+      cardWidth = ((width - spacing * 2) / columns) * 0.92;
+      cardHeight = cardWidth * 1.4;
       break;
-
+    case "foldable":
+      columns = isPortrait ? 4 : 5;
+      cardWidth = ((width - spacing * 2) / columns) * 0.9;
+      cardHeight = cardWidth * 1.35;
+      break;
+    case "setTopBox":
+      // 机顶盒常见 720p/1080p，遥控器操作需要更大的卡片与间距
+      columns = 4;
+      cardWidth = ((width - spacing * 2) / columns) * 0.9;
+      cardHeight = cardWidth * 1.4;
+      break;
+    case "phone":
+      columns = isPortrait ? 3 : 4;
+      cardWidth = ((width - spacing) / columns) * 0.85;
+      cardHeight = cardWidth * 1.2;
+      break;
     case "tablet":
       columns = isPortrait ? 3 : 4;
-      cardWidth = ((width - spacing) / columns) * 0.85; // 增大到85%
-      cardHeight = cardWidth * 1.4; // slightly less tall ratio
+      cardWidth = ((width - spacing) / columns) * 0.85;
+      cardHeight = cardWidth * 1.4;
       break;
-
     case "desktop":
-      // 桌面宽屏：更多列、更高信息密度（含侧边栏后的内容区由 flex 自适应）
       columns = width >= 1600 ? 7 : width >= 1400 ? 6 : 5;
       cardWidth = ((width - spacing * 2) / columns) * 0.9;
       cardHeight = cardWidth * 1.45;
       break;
-
     case "tv":
     default:
       columns = 5;
-      cardWidth = 160; // Fixed width for TV
-      cardHeight = 240; // Fixed height for TV
+      cardWidth = 160;
+      cardHeight = 240;
       break;
   }
 
   return {
     deviceType,
+    deviceForm,
+    foldState: DeviceUtils.getFoldState(width, height),
+    isHarmonyOS: DeviceUtils.isHarmonyOS(),
+    isHarmonyOSNext: DeviceUtils.isHarmonyOSNext(),
+    isSetTopBox: deviceForm === "setTopBox",
     columns,
     cardWidth,
     cardHeight,
@@ -106,25 +124,35 @@ const getLayoutConfig = (
   };
 };
 
+/**
+ * 响应式布局 Hook。
+ * 使用 useWindowDimensions 而非一次性 Dimensions.get，折叠屏展开/折叠、
+ * 横竖屏切换、桌面窗口缩放都会立即重算布局。
+ */
 export const useResponsiveLayout = (): ResponsiveConfig => {
-  const [dimensions, setDimensions] = useState(() => {
+  const windowDimensions = useWindowDimensions();
+  const [fallback, setFallback] = useState(() => {
     const { width, height } = Dimensions.get("window");
     return { width, height };
   });
 
   useEffect(() => {
     const subscription = Dimensions.addEventListener("change", ({ window }) => {
-      setDimensions({ width: window.width, height: window.height });
+      setFallback({ width: window.width, height: window.height });
     });
-
     return () => subscription?.remove();
   }, []);
 
-  const { width, height } = dimensions;
+  const width = windowDimensions?.width || fallback.width;
+  const height = windowDimensions?.height || fallback.height;
   const isPortrait = height > width;
   const deviceType = getDeviceType(width);
+  const deviceForm = DeviceUtils.getDeviceForm(width, height);
 
-  return getLayoutConfig(deviceType, width, height, isPortrait);
+  return useMemo(
+    () => getLayoutConfig(deviceType, width, height, isPortrait, deviceForm),
+    [deviceType, width, height, isPortrait, deviceForm],
+  );
 };
 
 // Utility hook for responsive values
@@ -147,24 +175,17 @@ export const useResponsiveStyles = () => {
   const config = useResponsiveLayout();
 
   return {
-    // Common responsive styles
     container: {
       paddingHorizontal: config.spacing,
     },
-
-    // Card styles
     cardContainer: {
       width: config.cardWidth,
       height: config.cardHeight,
       marginBottom: config.spacing,
     },
-
-    // Grid styles
     gridContainer: {
       paddingHorizontal: config.spacing / 2,
     },
-
-    // Typography
     titleFontSize:
       config.deviceType === "mobile"
         ? 18
@@ -181,8 +202,6 @@ export const useResponsiveStyles = () => {
           : config.deviceType === "desktop"
             ? 17
             : 18,
-
-    // Spacing
     sectionSpacing:
       config.deviceType === "mobile"
         ? 16
