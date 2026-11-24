@@ -192,7 +192,7 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
           TV 源设置
         </ThemedText>
         <ThemedText style={styles.hint}>
-          管理多个 M3U 源，并分别为首页 TV / MUSIC 入口指定要加载的源。
+          管理多个 M3U 源，并分别为首页「电视」/「音乐台」入口指定要加载的源。
         </ThemedText>
         {showRemoteHint && (
           <ThemedText style={styles.remoteHint}>
@@ -285,14 +285,14 @@ export const TVSourcesSection = forwardRef<TVSourcesSectionRef, TVSourcesSection
                         textStyle={styles.smallButtonText}
                       />
                       <StyledButton
-                        text="绑定 TV"
+                        text="绑定 电视"
                         variant="ghost"
                         onPress={() => handleBind("tv", source.id)}
                         style={styles.smallButton}
                         textStyle={styles.smallButtonText}
                       />
                       <StyledButton
-                        text="绑定 MUSIC"
+                        text="绑定 音乐台"
                         variant="ghost"
                         onPress={() => handleBind("mtv", source.id)}
                         style={styles.smallButton}

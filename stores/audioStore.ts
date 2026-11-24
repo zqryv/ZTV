@@ -41,6 +41,10 @@ interface AudioState {
   removeCustomTrack: (id: string) => Promise<void>;
   addCustomStation: (name: string, category: string, url: string) => Promise<RadioStation>;
   removeCustomStation: (id: string) => Promise<void>;
+  /** 用在线搜索结果替换「在线搜索」歌单（不持久化） */
+  setOnlineTracks: (tracks: MusicTrack[]) => void;
+  /** 用在线电台结果替换当前在线电台列表（不持久化） */
+  setOnlineStations: (stations: RadioStation[]) => void;
 
   setCurrentTrack: (id: string | null) => void;
   setCurrentStation: (id: string | null) => void;
@@ -66,6 +70,36 @@ const safeParse = <T,>(raw: string | null, fallback: T): T => {
   }
 };
 
+// 模块级在线数据（不持久化）：搜索结果与在线电台
+let onlineTracks: MusicTrack[] = [];
+let onlineStations: RadioStation[] = [];
+
+const isCustomTrack = (t: MusicTrack) => !BUILTIN_TRACKS.some((b) => b.id === t.id) && !onlineTracks.some((o) => o.id === t.id);
+const isCustomStation = (s: RadioStation) =>
+  !BUILTIN_RADIO_STATIONS.some((b) => b.id === s.id) && !onlineStations.some((o) => o.id === s.id);
+
+/** 统一重建曲目列表：内置 + 在线搜索 + 自定义 */
+const buildTracks = (custom: MusicTrack[]): MusicTrack[] => [
+  ...BUILTIN_TRACKS,
+  ...onlineTracks,
+  ...custom,
+];
+
+/** 统一重建歌单：「全部」含所有曲目，「在线搜索」含在线结果 */
+const buildPlaylists = (tracks: MusicTrack[]): MusicPlaylist[] =>
+  BUILTIN_PLAYLISTS.map((p) => {
+    if (p.id === "playlist-all") return { ...p, trackIds: tracks.map((t) => t.id) };
+    if (p.id === "playlist-online") return { ...p, trackIds: onlineTracks.map((t) => t.id) };
+    return p;
+  });
+
+/** 统一重建电台列表：内置 + 在线电台 + 自定义 */
+const buildStations = (custom: RadioStation[]): RadioStation[] => [
+  ...BUILTIN_RADIO_STATIONS,
+  ...onlineStations,
+  ...custom,
+];
+
 export const useAudioStore = create<AudioState>((set, get) => ({
   tracks: BUILTIN_TRACKS,
   playlists: BUILTIN_PLAYLISTS,
@@ -85,11 +119,9 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       ]);
       const customTracks = safeParse<MusicTrack[]>(rawTracks, []).filter((t) => t?.id && t?.url);
       const customStations = safeParse<RadioStation[]>(rawStations, []).filter((s) => s?.id && s?.url);
-      const tracks = [...BUILTIN_TRACKS, ...customTracks];
-      const playlists = BUILTIN_PLAYLISTS.map((p) =>
-        p.id === "playlist-all" ? { ...p, trackIds: tracks.map((t) => t.id) } : p
-      );
-      set({ tracks, playlists, stations: [...BUILTIN_RADIO_STATIONS, ...customStations] });
+      const tracks = buildTracks(customTracks);
+      const playlists = buildPlaylists(tracks);
+      set({ tracks, playlists, stations: buildStations(customStations) });
     } catch (e) {
       logger.info("Failed to load custom audio sources:", e);
     }
@@ -105,11 +137,9 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       accent: "#00E6A8",
       lyrics: ["—— 自定义音源，暂无歌词"],
     };
-    const custom = get().tracks.filter((t) => !BUILTIN_TRACKS.some((b) => b.id === t.id));
-    const tracks = [...BUILTIN_TRACKS, ...custom, track];
-    const playlists = get().playlists.map((p) =>
-      p.id === "playlist-all" ? { ...p, trackIds: tracks.map((t) => t.id) } : p
-    );
+    const custom = get().tracks.filter(isCustomTrack);
+    const tracks = buildTracks([...custom, track]);
+    const playlists = buildPlaylists(tracks);
     set({ tracks, playlists, currentTrackId: track.id, activePlaylistId: "playlist-all" });
     try {
       await AsyncStorage.setItem(
@@ -123,14 +153,10 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   removeCustomTrack: async (id) => {
-    if (BUILTIN_TRACKS.some((b) => b.id === id)) return;
-    const custom = get().tracks.filter(
-      (t) => !BUILTIN_TRACKS.some((b) => b.id === t.id) && t.id !== id
-    );
-    const tracks = [...BUILTIN_TRACKS, ...custom];
-    const playlists = get().playlists.map((p) =>
-      p.id === "playlist-all" ? { ...p, trackIds: tracks.map((t) => t.id) } : p
-    );
+    if (BUILTIN_TRACKS.some((b) => b.id === id) || onlineTracks.some((o) => o.id === id)) return;
+    const custom = get().tracks.filter((t) => isCustomTrack(t) && t.id !== id);
+    const tracks = buildTracks(custom);
+    const playlists = buildPlaylists(tracks);
     set({
       tracks,
       playlists,
@@ -150,8 +176,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
       url: url.trim(),
       accent: "#00E6A8",
     };
-    const custom = get().stations.filter((s) => !BUILTIN_RADIO_STATIONS.some((b) => b.id === s.id));
-    const stations = [...BUILTIN_RADIO_STATIONS, ...custom, station];
+    const custom = get().stations.filter(isCustomStation);
+    const stations = buildStations([...custom, station]);
     set({ stations, currentStationId: station.id });
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_STATIONS, JSON.stringify([...custom, station]));
@@ -162,17 +188,42 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   },
 
   removeCustomStation: async (id) => {
-    if (BUILTIN_RADIO_STATIONS.some((b) => b.id === id)) return;
-    const custom = get().stations.filter(
-      (s) => !BUILTIN_RADIO_STATIONS.some((b) => b.id === s.id) && s.id !== id
-    );
+    if (BUILTIN_RADIO_STATIONS.some((b) => b.id === id) || onlineStations.some((o) => o.id === id)) return;
+    const custom = get().stations.filter((s) => isCustomStation(s) && s.id !== id);
     set({
-      stations: [...BUILTIN_RADIO_STATIONS, ...custom],
+      stations: buildStations(custom),
       currentStationId: get().currentStationId === id ? null : get().currentStationId,
     });
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.CUSTOM_STATIONS, JSON.stringify(custom));
     } catch { /* ignore */ }
+  },
+
+  setOnlineTracks: (results) => {
+    onlineTracks = results;
+    // 从现有列表里剔除旧的在线曲目（保留内置与自定义）
+    const custom = get().tracks.filter(isCustomTrack);
+    const tracks = buildTracks(custom);
+    const playlists = buildPlaylists(tracks);
+    const prevCurrent = get().currentTrackId;
+    const keepCurrent = !!prevCurrent && results.some((t) => t.id === prevCurrent);
+    set({
+      tracks,
+      playlists,
+      activePlaylistId: results.length ? "playlist-online" : get().activePlaylistId,
+      // 若当前曲目仍在新列表中则保持播放，否则切到列表第一首
+      currentTrackId: keepCurrent
+        ? prevCurrent
+        : results.length
+        ? results[0].id
+        : get().currentTrackId,
+    });
+  },
+
+  setOnlineStations: (results) => {
+    onlineStations = results;
+    const custom = get().stations.filter(isCustomStation);
+    set({ stations: buildStations(custom) });
   },
 
   setCurrentTrack: (id) => set({ currentTrackId: id }),

@@ -15,6 +15,7 @@ import {
   TextInput,
   Modal,
   Alert,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -31,6 +32,8 @@ import {
   ListMusic,
   Trash2,
   X,
+  Search,
+  Globe,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { ThemedView } from "@/components/ThemedView";
@@ -44,7 +47,12 @@ import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { useAudioStore } from "@/stores/audioStore";
 import { audioPlayer, INITIAL_AUDIO_STATE, AudioPlaybackState } from "@/services/audioPlayer";
-import { MusicTrack } from "@/constants/AudioLibrary";
+import {
+  MusicTrack,
+  MUSIC_GENRES,
+  MUSIC_COUNTRIES,
+} from "@/constants/AudioLibrary";
+import { searchLatestMusic, browseMusicByGenre } from "@/services/onlineMusic";
 
 const formatTime = (ms: number) => {
   if (!ms || ms < 0) return "00:00";
@@ -78,6 +86,7 @@ export default function MusicScreen() {
     getPlaylistTracks,
     getNextTrackId,
     getPrevTrackId,
+    setOnlineTracks,
   } = useAudioStore();
 
   const [playback, setPlayback] = useState<AudioPlaybackState>(INITIAL_AUDIO_STATE);
@@ -90,11 +99,33 @@ export default function MusicScreen() {
   // 进度条采用 flex:1 自适应宽度，用 onLayout 实测，避免读取样式对象
   const [progressWidth, setProgressWidth] = useState(0);
 
+  // 在线音乐：关键词搜索 + 风格/国家筛选 + 内置曲库筛选
+  const [searchText, setSearchText] = useState("");
+  const [genre, setGenre] = useState<string>("全部");
+  const [country, setCountry] = useState<string>("全部");
+  const [onlineLoading, setOnlineLoading] = useState(false);
+  const [onlineMode, setOnlineMode] = useState(false);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
+
   const playlistTracks = useMemo(() => getPlaylistTracks(), [getPlaylistTracks, tracks, activePlaylistId]);
   const currentTrack = useMemo(
     () => tracks.find((t) => t.id === currentTrackId) ?? null,
     [tracks, currentTrackId]
   );
+
+  // 内置曲库按风格 / 国家 / 关键词本地筛选
+  const localFiltered = useMemo(() => {
+    const q = searchText.trim().toLowerCase();
+    return tracks.filter((t) => {
+      if (genre !== "全部" && t.genre !== genre) return false;
+      if (country !== "全部" && t.country !== country) return false;
+      if (q && !`${t.title} ${t.artist} ${t.album || ""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [tracks, genre, country, searchText]);
+
+  // 列表数据：在线搜索模式显示在线结果，否则显示本地筛选结果
+  const displayTracks = onlineMode ? playlistTracks : localFiltered;
 
   useEffect(() => {
     loadCustomSources();
@@ -164,17 +195,17 @@ export default function MusicScreen() {
           setFocusIndex((i) => Math.max(0, i - 1));
           break;
         case "down":
-          setFocusIndex((i) => Math.min(playlistTracks.length - 1, i + 1));
+          setFocusIndex((i) => Math.min(displayTracks.length - 1, i + 1));
           break;
       }
     },
-    [handlePrev, handleNext, playlistTracks.length]
+    [handlePrev, handleNext, displayTracks.length]
   );
   useSafeTVEventHandler(handleTVEvent);
 
   const handleToggle = async () => {
     if (!currentTrack) {
-      await startTrack(playlistTracks[0]?.id ?? null);
+      await startTrack(displayTracks[0]?.id ?? null);
       return;
     }
     if (!audioPlayer.getCurrentUrl()) {
@@ -208,11 +239,73 @@ export default function MusicScreen() {
     ]);
   };
 
+  /** 在线检索：关键词搜索最新音乐；无关键词时按「风格 + 国家」浏览 */
+  const handleOnlineSearch = useCallback(async () => {
+    const kw = searchText.trim();
+    setOnlineError(null);
+    setOnlineLoading(true);
+    try {
+      const results = kw
+        ? await searchLatestMusic(kw, country, 40)
+        : await browseMusicByGenre(genre, country, 40);
+      setOnlineTracks(results);
+      setOnlineMode(true);
+      setAutoNext(false);
+      audioPlayer.pause();
+      if (results.length === 0) {
+        setOnlineError("未找到相关音乐，试试其它关键词或地区");
+      } else {
+        Toast.show({ type: "success", text1: `找到 ${results.length} 首在线音乐` });
+      }
+    } catch (e: any) {
+      setOnlineError("网络不可用，已保留内置曲库，可离线浏览");
+      setOnlineMode(false);
+    } finally {
+      setOnlineLoading(false);
+    }
+  }, [searchText, country, genre, setOnlineTracks]);
+
+  /** 切换风格 / 国家时：在线模式重新联网浏览，本地模式只做筛选 */
+  const switchFilter = useCallback(
+    (nextGenre: string, nextCountry: string) => {
+      setGenre(nextGenre);
+      setCountry(nextCountry);
+      if (onlineMode) {
+        setSearchText("");
+        setOnlineError(null);
+        setOnlineLoading(true);
+        browseMusicByGenre(nextGenre, nextCountry, 40)
+          .then((results) => {
+            setOnlineTracks(results);
+            audioPlayer.pause();
+            if (results.length === 0) setOnlineError("该地区/风格暂无在线音乐");
+          })
+          .catch(() => setOnlineError("网络不可用，已保留当前列表"))
+          .finally(() => setOnlineLoading(false));
+      }
+    },
+    [onlineMode, setOnlineTracks]
+  );
+
+  /** 返回内置曲库浏览 */
+  const backToLibrary = useCallback(() => {
+    setOnlineMode(false);
+    setOnlineError(null);
+    setSearchText("");
+    setOnlineTracks([]);
+    setActivePlaylist("playlist-all");
+    audioPlayer.pause();
+  }, [setOnlineTracks, setActivePlaylist]);
+
   const progress = playback.durationMs > 0 ? playback.positionMs / playback.durationMs : 0;
 
   const renderTrack = ({ item, index }: { item: MusicTrack; index: number }) => {
     const isCurrent = item.id === currentTrackId;
-    const isCustom = !tracks.length ? false : !item.album?.includes("演示");
+    // 仅用户通过「添加音源」加入的曲目可删除（内置与在线搜索结果不可删）
+    const isCustom = !item.id.startsWith("track-") && !item.id.startsWith("itunes-");
+    const metaLine = [item.artist, item.genre && item.genre !== item.artist ? item.genre : null, item.country]
+      .filter(Boolean)
+      .join(" · ");
     return (
       <TouchableOpacity
         style={[
@@ -223,20 +316,24 @@ export default function MusicScreen() {
         onPress={() => startTrack(item.id)}
         activeOpacity={0.7}
       >
-        <LinearGradient
-          colors={[item.accent, `${item.accent}55`]}
-          style={dyn.trackCover}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          <Music2 size={deviceType === "tv" ? 22 : 16} color="#fff" />
-        </LinearGradient>
+        {item.cover ? (
+          <Image source={{ uri: item.cover }} style={dyn.trackCover} resizeMode="cover" />
+        ) : (
+          <LinearGradient
+            colors={[item.accent, `${item.accent}55`]}
+            style={dyn.trackCover}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Music2 size={deviceType === "tv" ? 22 : 16} color="#fff" />
+          </LinearGradient>
+        )}
         <View style={dyn.trackInfo}>
           <ThemedText style={[dyn.trackTitle, isCurrent && dyn.trackTitleActive]} numberOfLines={1}>
             {item.title}
           </ThemedText>
           <ThemedText style={dyn.trackArtist} numberOfLines={1}>
-            {item.artist} · {item.album ?? "我的音乐"}
+            {metaLine || item.album || "我的音乐"}
           </ThemedText>
         </View>
         <ThemedText style={dyn.trackDuration}>{item.durationLabel ?? "--:--"}</ThemedText>
@@ -274,53 +371,128 @@ export default function MusicScreen() {
         </StyledButton>
       </View>
 
-      {/* 歌单切换（胶囊） */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.playlistBar}>
-        {playlists.map((p) => (
+      {/* 搜索最新音乐 */}
+      <View style={dyn.searchRow}>
+        <View style={dyn.searchBox}>
+          <Search size={16} color={Colors.text.tertiary} />
+          <TextInput
+            style={dyn.searchInput}
+            placeholder="搜索最新音乐（歌名 / 歌手）"
+            placeholderTextColor="#8892A0"
+            value={searchText}
+            onChangeText={setSearchText}
+            onSubmitEditing={handleOnlineSearch}
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {!!searchText && (
+            <TouchableOpacity onPress={() => setSearchText("")} style={dyn.searchClear}>
+              <X size={14} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <StyledButton
+          text={onlineLoading ? "搜索中" : "搜索"}
+          variant="primary"
+          onPress={handleOnlineSearch}
+          disabled={onlineLoading}
+          style={dyn.searchButton}
+          textStyle={dyn.searchButtonText}
+        />
+        {onlineMode && (
+          <StyledButton text="曲库" variant="ghost" onPress={backToLibrary} style={dyn.searchButton} textStyle={dyn.searchButtonText} />
+        )}
+      </View>
+      {!!onlineError && <ThemedText style={dyn.onlineErrorText}>{onlineError}</ThemedText>}
+
+      {/* 音乐风格分类 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+        {MUSIC_GENRES.map((g) => (
           <StyledButton
-            key={p.id}
-            text={`${p.name} (${p.trackIds.length})`}
-            isSelected={activePlaylistId === p.id}
+            key={g}
+            text={g}
+            isSelected={genre === g}
             variant="default"
-            onPress={() => {
-              setActivePlaylist(p.id);
-              setAutoNext(false);
-              audioPlayer.pause();
-            }}
+            onPress={() => switchFilter(g, country)}
             style={dyn.pill}
             textStyle={dyn.pillText}
           />
         ))}
       </ScrollView>
 
+      {/* 国家 / 地区 */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+        <Globe size={14} color={Colors.brand.accent} style={dyn.globeIcon} />
+        {MUSIC_COUNTRIES.map((c) => (
+          <StyledButton
+            key={c}
+            text={c}
+            isSelected={country === c}
+            variant="default"
+            onPress={() => switchFilter(genre, c)}
+            style={dyn.pill}
+            textStyle={dyn.pillText}
+          />
+        ))}
+      </ScrollView>
+
+      {/* 歌单切换（胶囊）：本地模式展示，在线模式隐藏 */}
+      {!onlineMode && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.playlistBar}>
+          {playlists.filter((p) => p.id !== "playlist-online").map((p) => (
+            <StyledButton
+              key={p.id}
+              text={`${p.name} (${p.trackIds.length})`}
+              isSelected={activePlaylistId === p.id}
+              variant="default"
+              onPress={() => {
+                setActivePlaylist(p.id);
+                setAutoNext(false);
+                audioPlayer.pause();
+              }}
+              style={dyn.pill}
+              textStyle={dyn.pillText}
+            />
+          ))}
+        </ScrollView>
+      )}
+
       <View style={dyn.body}>
         {/* 左侧：曲目列表 */}
         <View style={dyn.listPanel}>
           <View style={dyn.panelHeader}>
             <ListMusic size={16} color={Colors.brand.accent} />
-            <ThemedText style={dyn.panelTitle}>播放列表</ThemedText>
+            <ThemedText style={dyn.panelTitle}>
+              {onlineMode ? `在线音乐 (${displayTracks.length})` : `曲库 (${displayTracks.length})`}
+            </ThemedText>
           </View>
           <FlatList
-            data={playlistTracks}
+            data={displayTracks}
             renderItem={renderTrack}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={
-              <ThemedText style={dyn.emptyText}>暂无曲目，点击右上角添加音源</ThemedText>
+              <ThemedText style={dyn.emptyText}>
+                {onlineLoading ? "正在搜索最新音乐…" : onlineMode ? "未找到在线音乐，换个关键词试试" : "该筛选条件下暂无曲目"}
+              </ThemedText>
             }
           />
         </View>
 
         {/* 右侧：正在播放 + 歌词 */}
         <View style={dyn.playerPanel}>
-          <LinearGradient
-            colors={[currentTrack?.accent ?? "#00E6A8", Colors.surface.raised]}
-            style={dyn.heroCover}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <Music2 size={deviceType === "tv" ? 72 : 48} color="rgba(255,255,255,0.85)" />
-          </LinearGradient>
+          {currentTrack?.cover ? (
+            <Image source={{ uri: currentTrack.cover }} style={dyn.heroCover} resizeMode="cover" />
+          ) : (
+            <LinearGradient
+              colors={[currentTrack?.accent ?? "#00E6A8", Colors.surface.raised]}
+              style={dyn.heroCover}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Music2 size={deviceType === "tv" ? 72 : 48} color="rgba(255,255,255,0.85)" />
+            </LinearGradient>
+          )}
           <ThemedText style={dyn.nowTitle} numberOfLines={1}>
             {currentTrack?.title ?? "选择一首曲目"}
           </ThemedText>
@@ -489,6 +661,26 @@ const createStyles = (deviceType: string, spacing: number) => {
     pageTitle: { fontSize: isTV ? 30 : 22, fontWeight: "bold" },
     pageSubtitle: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
     addButton: { borderRadius: 20, paddingHorizontal: 18 },
+    searchRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing },
+    searchBox: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: Colors.surface.raised,
+      borderWidth: 1,
+      borderColor: Colors.surface.border,
+      borderRadius: 20,
+      paddingHorizontal: 12,
+      height: 40,
+    },
+    searchInput: { flex: 1, color: Colors.text.primary, fontSize: 14 },
+    searchClear: { padding: 4 },
+    searchButton: { borderRadius: 20, paddingHorizontal: 14, height: 40, justifyContent: "center" },
+    searchButtonText: { fontSize: 13 },
+    onlineErrorText: { color: "#FFB86B", fontSize: 12, marginBottom: 8 },
+    filterBar: { marginBottom: 8, flexGrow: 0 },
+    globeIcon: { alignSelf: "center", marginRight: 4 },
     playlistBar: { marginBottom: spacing, flexGrow: 0 },
     pill: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8 },
     pillText: { fontSize: 13 },
@@ -520,6 +712,7 @@ const createStyles = (deviceType: string, spacing: number) => {
       borderRadius: 8,
       alignItems: "center",
       justifyContent: "center",
+      overflow: "hidden",
     },
     trackInfo: { flex: 1, marginLeft: 12 },
     trackTitle: { fontSize: isTV ? 18 : 14, fontWeight: "600" },
@@ -544,6 +737,7 @@ const createStyles = (deviceType: string, spacing: number) => {
       alignItems: "center",
       justifyContent: "center",
       marginBottom: spacing,
+      overflow: "hidden",
     },
     nowTitle: { fontSize: isTV ? 26 : 20, fontWeight: "bold", textAlign: "center" },
     nowArtist: { fontSize: 12, color: Colors.text.tertiary, marginTop: 4, textAlign: "center" },

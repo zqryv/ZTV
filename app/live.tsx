@@ -216,7 +216,7 @@ export default function LiveScreen() {
         style={dynamicStyles.emptyButton}
       />
       <ThemedText style={dynamicStyles.emptyHint}>
-        遥控器：左右换台 · 下键频道列表 · 上键切换 TV / MUSIC
+        遥控器：左右换台 · 下键频道列表 · 上键切换 电视 / 音乐台
       </ThemedText>
     </View>
   );

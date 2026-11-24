@@ -31,7 +31,7 @@ export interface Category {
 
 /**
  * 入口型分类：不加载点播内容，点击后跳转到对应的功能页。
- * 包含直播（TV / MUSIC）、收音机、音乐播放。
+ * 包含直播（电视 / 音乐台）、音乐播放、收音机。
  */
 export const isEntryCategory = (category: Category | null | undefined): boolean =>
   !!category && ["live", "radio", "music"].includes(category.type ?? "");
@@ -63,11 +63,12 @@ const initialCategories: Category[] = [
   },
   { title: "综艺", type: "tv", tag: "综艺" },
   { title: "豆瓣 Top250", type: "movie", tag: "top250" },
-  // 功能入口分类：点击直接进入对应页面，不参与点播内容加载
+  // 功能入口分类：点击直接进入对应页面，不参与点播内容加载。
+  // 顺序：电视 → 音乐台 → 音乐播放 → 收音机（与用户视觉顺序一致）。
+  { title: "电视", type: "live", slot: "tv" },
+  { title: "音乐台", type: "live", slot: "mtv" },
   { title: "音乐播放", type: "music" },
   { title: "收音机", type: "radio" },
-  { title: "TV", type: "live", slot: "tv" },
-  { title: "MUSIC", type: "live", slot: "mtv" },
 ];
 
 // 添加缓存项接口
@@ -121,9 +122,10 @@ const useHomeStore = create<HomeState>((set, get) => ({
   error: null,
 
   fetchInitialData: async () => {
-    const { apiBaseUrl } = useSettingsStore.getState();
-    await useAuthStore.getState().checkLoginStatus(apiBaseUrl);
-
+    // 登录检查已在 _layout 启动时触发，且 checkLoginStatus 内部做了并发去重。
+    // 这里不再串行等待它——点播分类（电影/电视剧）的内容加载无需登录，
+    // 直接并行请求可显著缩短首屏等待时间。仅「最近播放」需登录态，
+    // 其自身在 loadMoreData 中通过 isLoggedIn 判断。
     const { selectedCategory } = get();
     const cacheKey = getCacheKey(selectedCategory);
 

@@ -81,6 +81,9 @@ export class API {
   // 会话恢复回调（由 authStore 注册），401 时自动重登并重试一次
   private sessionRestorer: (() => Promise<boolean>) | null = null;
 
+  /** 单次请求默认超时（毫秒）。避免网络异常时无限挂起导致界面卡顿。 */
+  private static readonly DEFAULT_TIMEOUT_MS = 12000;
+
   constructor(baseURL?: string) {
     if (baseURL) {
       this.baseURL = baseURL;
@@ -95,20 +98,55 @@ export class API {
     this.sessionRestorer = restorer;
   }
 
+  /**
+   * 带超时的 fetch：任何请求超过 DEFAULT_TIMEOUT_MS 未完成即主动 Abort，
+   * 避免弱网 / 服务器无响应时界面长期卡顿。外部传入的 signal（如搜索取消）
+   * 仍会被尊重——任一 signal 触发都会中止请求。
+   */
+  private async _fetchWithTimeout(
+    fullUrl: string,
+    options: RequestInit = {},
+    timeoutMs: number = API.DEFAULT_TIMEOUT_MS
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const externalSignal = options.signal;
+
+    // 外部 signal 取消时联动中止内部 controller
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        controller.abort();
+      } else {
+        externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+      }
+    }
+
+    try {
+      return await fetch(fullUrl, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+      if (externalSignal) {
+        externalSignal.removeEventListener("abort", onExternalAbort);
+      }
+    }
+  }
+
   private async _fetch(url: string, options: RequestInit = {}): Promise<Response> {
     if (!this.baseURL) {
       throw new Error("API_URL_NOT_SET");
     }
 
     // 框架默认会携带 cookie，无需手动设置
-    const response = await fetch(`${this.baseURL}${url}`, options);
+    const fullUrl = `${this.baseURL}${url}`;
+    const response = await this._fetchWithTimeout(fullUrl, options);
 
     if (response.status === 401) {
       // 会话过期：自动重登后重试一次（登录接口本身除外，避免循环）
       if (this.sessionRestorer && !url.startsWith("/api/login")) {
         const restored = await this.sessionRestorer();
         if (restored) {
-          const retryResponse = await fetch(`${this.baseURL}${url}`, options);
+          const retryResponse = await this._fetchWithTimeout(fullUrl, options);
           if (retryResponse.status === 401) {
             throw new Error("UNAUTHORIZED");
           }

@@ -4,6 +4,13 @@
 
 ## ✨ ZTV 功能
 
+### v2.0.1 分类统一 / 在线音乐电台 / 连接提速
+
+- **分类样式统一与更名**：首页功能入口（电视 / 音乐台 / 音乐播放 / 收音机）改为与「电影」完全一致的胶囊样式（去掉图标与描边）；`TV` 更名 `电视`、`MUSIC` 更名 `音乐台`，顺序调整为 **电视 → 音乐台 → 音乐播放 → 收音机**（内部槽位 id 保持 `tv`/`mtv`，已保存的绑定不受影响）。
+- **音乐播放增强**：内置 16 首可直连在线曲目，按**音乐风格**（流行/摇滚/电子/古典/爵士/轻音乐/民谣/说唱）与**国家/地区**（中国/欧美/日本/韩国）分类浏览；新增「搜索最新音乐」，通过 iTunes Search API 在线检索真实歌曲（含封面/歌手/试听），可按风格+国家联网浏览，离线自动回退内置曲库。
+- **收音机增强**：内置电台扩充到 8 个（多国可直连流），支持**国家/地区 + 分类**双维筛选；新增「在线电台」按钮，通过 radio-browser.info 按国家/分类加载全球广播（多镜像容错），失败时保留内置电台可离线收听。
+- **API 连接提速**：所有 API 请求加入 **12 秒超时 + AbortController**（弱网不再无限挂起）；登录检查去重并去掉固定 1 秒重试睡眠（2-3 秒 → 0.2 秒）；首页点播内容不再串行等待登录检查，首屏更快；海报优先走服务器代理，避免豆瓣图床直连超时。
+
 ### v2.0.0 界面与功能全面升级
 
 - **整体界面重设计**：暗色沉浸背景 `#0B0E13` + 青绿主色 `#00E6A8`，统一胶囊式底部导航、圆角卡片、品牌头部与语义色令牌；手机（底部 Tab）/ 平板、桌面（侧边栏）/ TV（遥控器焦点 Stack）四端自适应。
@@ -39,8 +46,10 @@
 | `stores/homeStore.ts`、`app/index.tsx` | 首页分类置末 TV / MUSIC，追加音乐播放、收音机入口并跳转 |
 | `app/live.tsx` | 按入口加载对应源、遥控器交互、空状态引导页 |
 | `app/search.tsx`、`utils/pinyin.ts`、`constants/HotSearch.ts` | 首字母检索、热搜影视榜、A–Z 索引与点击快搜 |
-| `app/music.tsx`、`app/radio.tsx`、`constants/AudioLibrary.ts` | 音乐播放页、收音机页与内置曲库/电台 |
-| `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态及自定义音源持久化 |
+| `app/music.tsx`、`app/radio.tsx`、`constants/AudioLibrary.ts` | 音乐播放页（在线搜索/风格分国）、收音机页（在线电台/分国）、内置曲库/电台 |
+| `services/onlineMusic.ts` | iTunes 在线音乐搜索 + radio-browser 在线电台（带超时与镜像容错） |
+| `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态、自定义音源与在线结果持久化 |
+| `services/api.ts`、`stores/authStore.ts`、`components/PosterImage.tsx` | 请求超时、登录检查去重提速、海报代理优先加载 |
 | `hooks/useSafeTVEventHandler.ts` | 跨平台 TV 遥控器事件安全封装 |
 | `constants/Colors.ts`、`components/navigation/*` | 设计系统令牌、四端导航与视觉统一 |
 | `services/m3u.ts` | 新增带超时的 `testM3uUrl` |
@@ -59,7 +68,7 @@ yarn typecheck       # TypeScript 类型检查
 
 ## 📦 各平台安装版本
 
-仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.0.0`）：
+仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.0.1`）：
 
 | 平台 | 资源文件 | 安装方式 |
 | --- | --- | --- |

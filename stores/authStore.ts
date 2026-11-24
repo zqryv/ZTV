@@ -22,26 +22,32 @@ interface AuthState {
 // 并发去重：多个请求同时 401 时只触发一次自动登录
 let restorePromise: Promise<void> | null = null;
 
+// 并发去重：_layout 与首页会同时触发 checkLoginStatus，
+// 共享同一次检查，避免重复的网络往返与 sleep 等待。
+let checkLoginPromise: Promise<void> | null = null;
+
 const useAuthStore = create<AuthState>((set, get) => ({
   isLoggedIn: false,
   isLoginModalVisible: false,
   showLoginModal: () => set({ isLoginModalVisible: true }),
   hideLoginModal: () => set({ isLoginModalVisible: false }),
-  checkLoginStatus: async (apiBaseUrl?: string) => {
+  checkLoginStatus: (apiBaseUrl?: string) => {
     if (!apiBaseUrl) {
       set({ isLoggedIn: false, isLoginModalVisible: false });
-      return;
+      return Promise.resolve();
     }
+    // 已有进行中的检查则复用，避免 _layout 与首页重复请求
+    if (checkLoginPromise) return checkLoginPromise;
+    checkLoginPromise = (async () => {
     try {
-      // 确保拿到服务器配置。冷启动时第一次 getServerConfig 请求常因网络栈未就绪而失败，
-      // 因此最多重试几次（每次间隔短暂等待），拿到 StorageType 才继续；全部失败才提示。
-      // 直接 await 真实请求（不用固定超时轮询），既处理"慢"也处理"第一次失败"。
+      // 确保拿到服务器配置。冷启动时第一次请求偶尔失败，最多重试 2 次；
+      // 请求本身在 api 层已有 12s 超时，这里用很短的退避即可。
       let serverConfig = useSettingsStore.getState().serverConfig;
-      const maxAttempts = 3;
+      const maxAttempts = 2;
       for (let attempt = 0; attempt < maxAttempts && !serverConfig?.StorageType; attempt++) {
         if (attempt > 0) {
-          // 重试前短暂等待，给冷启动的网络/服务器一点时间就绪
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // 短暂退避即可（api 层已处理超时与失败），不再固定 sleep 1 秒
+          await new Promise((resolve) => setTimeout(resolve, 200));
         }
         if (useSettingsStore.getState().isLoadingServerConfig) {
           // 已在加载：直接 await 正在进行的请求 Promise，等它真正完成
@@ -88,6 +94,10 @@ const useAuthStore = create<AuthState>((set, get) => ({
         set({ isLoggedIn: false });
       }
     }
+    })().finally(() => {
+      checkLoginPromise = null;
+    });
+    return checkLoginPromise;
   },
   restoreSession: async () => {
     // 并发去重：多个 401 同时触发时只执行一次自动登录

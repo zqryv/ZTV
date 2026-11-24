@@ -14,7 +14,7 @@ import {
   Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Radio, Play, Pause, Square, Plus, Trash2, X, Volume2, Signal } from "lucide-react-native";
+import { Radio, Play, Pause, Square, Plus, Trash2, X, Volume2, Signal, Globe, RefreshCw } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
@@ -27,7 +27,13 @@ import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
 import ResponsiveHeader from "@/components/navigation/ResponsiveHeader";
 import { useAudioStore } from "@/stores/audioStore";
 import { audioPlayer, INITIAL_AUDIO_STATE, AudioPlaybackState } from "@/services/audioPlayer";
-import { BUILTIN_RADIO_STATIONS, RADIO_CATEGORIES, RadioStation } from "@/constants/AudioLibrary";
+import {
+  BUILTIN_RADIO_STATIONS,
+  RADIO_CATEGORIES,
+  RADIO_COUNTRIES,
+  RadioStation,
+} from "@/constants/AudioLibrary";
+import { loadOnlineStations } from "@/services/onlineMusic";
 
 export default function RadioScreen() {
   const responsiveConfig = useResponsiveLayout();
@@ -43,28 +49,43 @@ export default function RadioScreen() {
     removeCustomStation,
     setCurrentStation,
     setVolume,
+    setOnlineStations,
   } = useAudioStore();
 
   const [playback, setPlayback] = useState<AudioPlaybackState>(INITIAL_AUDIO_STATE);
-  const [category, setCategory] = useState("全部");
+  const [category, setCategory] = useState<string>("全部");
+  const [country, setCountry] = useState<string>("全部");
+  const [onlineLoading, setOnlineLoading] = useState(false);
+  const [onlineError, setOnlineError] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newUrl, setNewUrl] = useState("");
   const [focusIndex, setFocusIndex] = useState(0);
 
+  // 先按国家/地区再按分类筛选（内置 + 在线电台）
   const filtered = useMemo(
-    () => (category === "全部" ? stations : stations.filter((s) => s.category === category)),
-    [stations, category]
+    () =>
+      stations.filter((s) => {
+        if (country !== "全部" && s.country !== country) return false;
+        if (category !== "全部" && s.category !== category) return false;
+        return true;
+      }),
+    [stations, country, category]
   );
   const currentStation = useMemo(
     () => stations.find((s) => s.id === currentStationId) ?? null,
     [stations, currentStationId]
   );
-  const categories = useMemo(
-    () => Array.from(new Set([...RADIO_CATEGORIES, ...stations.map((s) => s.category)])),
-    [stations]
-  );
+  const categories = useMemo(() => {
+    const base = RADIO_CATEGORIES as readonly string[];
+    // 只补充预置分类之外的常见在线标签，避免胶囊过长
+    const extras = stations
+      .map((s) => s.category)
+      .filter((c) => c && !base.includes(c))
+      .slice(0, 8);
+    return Array.from(new Set([...base, ...extras]));
+  }, [stations]);
 
   useEffect(() => {
     loadCustomSources();
@@ -149,6 +170,28 @@ export default function RadioScreen() {
     ]);
   };
 
+  /** 联网加载在线广播（按国家/地区 + 分类），失败时保留内置电台 */
+  const handleLoadOnline = useCallback(async () => {
+    setOnlineLoading(true);
+    setOnlineError(null);
+    try {
+      const results = await loadOnlineStations(country, category, 40);
+      setOnlineStations(results);
+      setFocusIndex(0);
+      if (results.length === 0) {
+        setOnlineError("该地区/分类暂无在线电台");
+      } else {
+        Toast.show({ type: "success", text1: `已加载 ${results.length} 个在线电台` });
+      }
+    } catch (e: any) {
+      setOnlineError("网络连接失败，已保留内置电台，可离线收听");
+    } finally {
+      setOnlineLoading(false);
+    }
+  }, [country, category, setOnlineStations]);
+
+  /** 切换筛选时不自动清空在线电台，让用户手动点「在线电台」刷新 */
+
   const dyn = useMemo(() => createStyles(deviceType, spacing), [deviceType, spacing]);
 
   const renderStation = ({ item, index }: { item: RadioStation; index: number }) => {
@@ -181,7 +224,7 @@ export default function RadioScreen() {
             )}
           </View>
           <ThemedText style={dyn.stationDesc} numberOfLines={1}>
-            {item.category} · {item.description}
+            {[item.country, item.category, item.description].filter(Boolean).join(" · ")}
           </ThemedText>
         </View>
         {!BUILTIN_RADIO_STATIONS.some((b) => b.id === item.id) && (
@@ -211,6 +254,26 @@ export default function RadioScreen() {
         </StyledButton>
       </View>
 
+      {/* 国家 / 地区 */}
+      <FlatList
+        horizontal
+        data={RADIO_COUNTRIES as readonly string[]}
+        keyExtractor={(item) => item}
+        showsHorizontalScrollIndicator={false}
+        style={dyn.categoryBar}
+        ListHeaderComponent={<Globe size={14} color={Colors.brand.accent} style={dyn.globeIcon} />}
+        renderItem={({ item }) => (
+          <StyledButton
+            text={item}
+            isSelected={country === item}
+            variant="default"
+            onPress={() => setCountry(item)}
+            style={dyn.pill}
+            textStyle={dyn.pillText}
+          />
+        )}
+      />
+
       {/* 分类胶囊 */}
       <FlatList
         horizontal
@@ -229,6 +292,22 @@ export default function RadioScreen() {
           />
         )}
       />
+
+      {/* 在线电台加载 + 状态 */}
+      <View style={dyn.onlineRow}>
+        <StyledButton
+          text={onlineLoading ? "加载中…" : "在线电台"}
+          variant="primary"
+          onPress={handleLoadOnline}
+          disabled={onlineLoading}
+          style={dyn.onlineButton}
+          textStyle={dyn.onlineButtonText}
+        >
+          <RefreshCw size={14} color="#fff" />
+        </StyledButton>
+        <ThemedText style={dyn.onlineHint}>按上方国家/分类加载全球广播</ThemedText>
+      </View>
+      {!!onlineError && <ThemedText style={dyn.onlineErrorText}>{onlineError}</ThemedText>}
 
       {/* 正在播放条 */}
       <LinearGradient
@@ -394,7 +473,13 @@ const createStyles = (deviceType: string, spacing: number) => {
     pageTitle: { fontSize: isTV ? 30 : 22, fontWeight: "bold" },
     pageSubtitle: { fontSize: 12, color: Colors.text.tertiary, marginTop: 2 },
     addButton: { borderRadius: 20, paddingHorizontal: 18 },
-    categoryBar: { flexGrow: 0, marginBottom: spacing },
+    categoryBar: { flexGrow: 0, marginBottom: 8 },
+    globeIcon: { alignSelf: "center", marginRight: 6 },
+    onlineRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
+    onlineButton: { borderRadius: 20, paddingHorizontal: 16, flexDirection: "row", gap: 6 },
+    onlineButtonText: { fontSize: 13 },
+    onlineHint: { fontSize: 11, color: Colors.text.tertiary, flex: 1 },
+    onlineErrorText: { color: "#FFB86B", fontSize: 12, marginBottom: 8 },
     pill: { borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, marginRight: 8 },
     pillText: { fontSize: 13 },
     nowBar: {

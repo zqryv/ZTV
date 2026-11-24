@@ -6,7 +6,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { api } from "@/services/api";
 import VideoCard from "@/components/VideoCard";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Search, Settings, LogOut, Heart, Music2, Radio, Tv, Zap } from "lucide-react-native";
+import { Search, Settings, LogOut, Heart, Music2, Radio, Zap } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { StyledButton } from "@/components/StyledButton";
 import useHomeStore, { RowItem, Category, isEntryCategory } from "@/stores/homeStore";
@@ -164,36 +164,18 @@ export default function HomeScreen() {
   };
 
   const renderCategory = ({ item }: { item: Category }) => {
+    // 入口分类（电视/音乐台/音乐播放/收音机）与「电影」等内容分类使用完全相同的胶囊样式：
+    // 同款 variant、同款 categoryButton / categoryText，不附加图标、描边或品牌色。
     const isSelected = !isEntryCategory(item) && selectedCategory?.title === item.title;
-    const isEntry = isEntryCategory(item);
-    // 功能入口用胶囊 + 品牌色图标，与内容分类在视觉上区分
-    const Icon =
-      item.type === "music" ? Music2 : item.type === "radio" ? Radio : item.type === "live" ? Tv : null;
     return (
       <StyledButton
         onPress={() => handleCategorySelect(item)}
         isSelected={isSelected}
-        variant={isEntry ? "ghost" : "default"}
-        style={[dynamicStyles.categoryButton, isEntry && dynamicStyles.entryButton]}
-      >
-        <View style={dynamicStyles.categoryInner}>
-          {Icon && (
-            <Icon
-              size={deviceType === "tv" ? 18 : 14}
-              color={isEntry ? Colors.brand.accent : Colors.dark.text}
-            />
-          )}
-          <ThemedText
-            style={[
-              dynamicStyles.categoryText,
-              isEntry && dynamicStyles.entryText,
-              isSelected && dynamicStyles.categoryTextSelected,
-            ]}
-          >
-            {item.title}
-          </ThemedText>
-        </View>
-      </StyledButton>
+        variant="default"
+        style={dynamicStyles.categoryButton}
+        text={item.title}
+        textStyle={dynamicStyles.categoryText}
+      />
     );
   };
 
@@ -354,16 +336,6 @@ export default function HomeScreen() {
       borderRadius: 20,
       marginHorizontal: deviceType === "tv" ? spacing / 4 : spacing / 3,
     },
-    categoryInner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    },
-    entryButton: {
-      borderWidth: 1,
-      borderColor: "rgba(0,230,168,0.35)",
-      backgroundColor: "rgba(0,230,168,0.06)",
-    },
     categoryText: {
       fontSize: deviceType === "mobile" ? 14 : deviceType === "tv" ? 18 : 15,
       fontWeight: "500",
@@ -372,10 +344,6 @@ export default function HomeScreen() {
     categoryTextSelected: {
       color: Colors.brand.onAccent,
       fontWeight: "700",
-    },
-    entryText: {
-      color: Colors.brand.accent,
-      fontWeight: "600",
     },
     contentContainer: {
       flex: 1,

@@ -37,17 +37,17 @@ export interface M3uTestResult {
 export const LIVE_SOURCE_SLOTS: LiveSourceSlot[] = ["tv", "mtv"];
 
 /**
- * 槽位显示名。内部标识仍为 "mtv"（保持与用户已保存绑定的兼容），
- * 展示层统一为 MUSIC。
+ * 槽位显示名。内部标识仍为 "tv" / "mtv"（保持与用户已保存绑定的兼容），
+ * 展示层统一为「电视」/「音乐台」。
  */
 export const LIVE_SLOT_LABELS: Record<LiveSourceSlot, string> = {
-  tv: "TV",
-  mtv: "MUSIC",
+  tv: "电视",
+  mtv: "音乐台",
 };
 
 export const LIVE_SLOT_DESCRIPTIONS: Record<LiveSourceSlot, string> = {
-  tv: "首页 TV 入口使用的直播源",
-  mtv: "首页 MUSIC 入口使用的直播源",
+  tv: "首页「电视」入口使用的直播源",
+  mtv: "首页「音乐台」入口使用的直播源",
 };
 
 /**
@@ -70,7 +70,7 @@ export const DEFAULT_LIVE_SOURCES: LiveSourcesConfig = {
     },
     {
       id: BUILTIN_MTV_SOURCE_ID,
-      name: "内置·MUSIC 频道",
+      name: "内置·音乐台频道",
       url: "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
       createdAt: 0,
     },
