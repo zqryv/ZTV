@@ -1,16 +1,15 @@
 /**
  * 音乐播放页（分类「音乐播放」）。
  *
- * 布局重新规划后的信息层级：
- *  ① 音源切换（最新单曲 / 音乐电台 / 内置曲库）→ 明确「我正在浏览什么」
- *  ② 常驻搜索框 + 屏幕键盘 → 电视 / 机顶盒无需系统输入法也能输入
- *  ③ 条件筛选（风格 / 地区 / 歌单）→ 次级操作，可折叠
- *  ④ 正在播放（状态 / 封面 / 进度 / 控制 / 音量 / 停止）→ 大屏固定右栏
- *  ⑤ 曲目列表 → 剩余空间，显示来源与时长
+ * 界面按工作区设计方案「18 音乐播放器 Music Player」（Ardot 设计稿 750387664062996）
+ * 重新排布：氛围光晕渐变 + 大方形封面 + 曲目信息 + 进度条 + 五键控制 + 四工具图标，
+ * 让「正在播放」成为唯一主角；音源 / 搜索 / 筛选收进可折叠的「发现音乐」面板去杂乱。
  *
- * 播放能力来自 services/audioPlayer（expo-av，项目既有依赖）。
- * 参考 react-native-track-player / React Navigation 的做法：页面失焦即停止并释放，
- * 叠加根布局的 AppState 监听，彻底解决「退出后仍后台播放」。
+ * 本次仅替换界面层，以下能力全部沿用 v2.2.0，接口与交互逻辑零改动：
+ *  - 多音源聚合与三级降级（最新单曲 → 音乐电台 → 内置曲库）、风格 / 地区 / 歌单筛选
+ *  - 常驻可输入的搜索框 + 屏幕键盘（电视 / 机顶盒无需系统输入法）+ 中文热词一键输入
+ *  - 曲目元数据、封面、歌词、进度 seek、循环 / 随机 / 音量、自定义音源增删
+ *  - useFocusEffect 失焦停止 + 根布局 AppState 监听，退出即停止并释放 expo-av 资源
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -23,6 +22,7 @@ import {
   Modal,
   Alert,
   Image,
+  useWindowDimensions,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -44,6 +44,8 @@ import {
   Globe,
   Square,
   RefreshCw,
+  MoreHorizontal,
+  Mic2,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { ThemedView } from "@/components/ThemedView";
@@ -82,6 +84,7 @@ export default function MusicScreen() {
   const responsiveConfig = useResponsiveLayout();
   const commonStyles = getCommonResponsiveStyles(responsiveConfig);
   const { deviceType, spacing } = responsiveConfig;
+  const { width: windowWidth } = useWindowDimensions();
   const isTVLike = deviceType === "tv" || Boolean(responsiveConfig.isSetTopBox);
   const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
 
@@ -124,8 +127,13 @@ export default function MusicScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(isTVLike);
-  const [filtersOpen, setFiltersOpen] = useState(isWide);
+  const [discoverOpen, setDiscoverOpen] = useState(isWide);
+  // 设计稿「四工具图标」：列表 / 歌词 / 音量 / 刷新，均为真实功能开关
+  const [listVisible, setListVisible] = useState(true);
+  const [lyricsVisible, setLyricsVisible] = useState(isWide);
+  const [volumeVisible, setVolumeVisible] = useState(isWide);
   const bootstrapped = useRef(false);
+  const searchRef = useRef<TextInput>(null);
 
   const currentTrack = useMemo(
     () => tracks.find((t) => t.id === currentTrackId) ?? null,
@@ -325,6 +333,12 @@ export default function MusicScreen() {
     [sourceMode, searchText, loadSource]
   );
 
+  /** 展开「发现音乐」面板并把焦点交给搜索框，保证搜索始终可输入 */
+  const openDiscover = useCallback(() => {
+    setDiscoverOpen(true);
+    searchRef.current?.focus();
+  }, []);
+
   // TV 遥控器：屏幕键盘打开时让焦点系统接管，避免按键被误判为切歌
   const handleTVEvent = useCallback(
     (event: any) => {
@@ -382,6 +396,7 @@ export default function MusicScreen() {
 
   const dyn = useMemo(() => createStyles(deviceType, spacing), [deviceType, spacing]);
   const progress = playback.durationMs > 0 ? playback.positionMs / playback.durationMs : 0;
+  const progressPercent = Math.min(100, Math.max(0, progress * 100));
   const stateLabel = playback.isLoading
     ? "连接中"
     : playback.isPlaying
@@ -390,6 +405,10 @@ export default function MusicScreen() {
     ? "已暂停"
     : "待播放";
   const sourceDescription = MUSIC_SOURCES.find((s) => s.id === sourceMode)?.description ?? "";
+  const accent = currentTrack?.accent ?? Colors.brand.accent;
+  const coverSize = Math.round(
+    Math.min(isTVLike ? 300 : 260, Math.max(150, isWide ? windowWidth * 0.26 : windowWidth * 0.5))
+  );
 
   const renderTrack = ({ item, index }: { item: MusicTrack; index: number }) => {
     const isCurrent = item.id === currentTrackId;
@@ -441,7 +460,7 @@ export default function MusicScreen() {
     ? "该筛选条件下暂无曲目"
     : "暂无在线内容，试试切换音源或关键词";
 
-  // ── ① 页头 ──────────────────────────────────────────────────────────────
+  // ── 设计稿页头：标题「正在播放 / ZTV MUSIC」+ 圆形「更多」「添加」 ──────
   const pageHeader = (
     <View style={dyn.pageHeader}>
       <View style={dyn.pageTitleRow}>
@@ -449,42 +468,40 @@ export default function MusicScreen() {
           <Music2 size={18} color={Colors.brand.onAccent} />
         </LinearGradient>
         <View style={dyn.pageTitleText}>
-          <ThemedText style={dyn.pageTitle}>音乐播放</ThemedText>
-          <ThemedText style={dyn.pageSubtitle} numberOfLines={1}>{sourceDescription}</ThemedText>
+          <ThemedText style={dyn.pageTitle}>正在播放</ThemedText>
+          <ThemedText style={dyn.pageSubtitle} numberOfLines={1}>
+            ZTV MUSIC · {sourceDescription}
+          </ThemedText>
         </View>
       </View>
-      <StyledButton text="添加音源" variant="primary" onPress={() => setAddModalVisible(true)} style={dyn.addButton}>
-        <Plus size={16} color="#fff" />
-      </StyledButton>
-    </View>
-  );
-
-  // ── ② 音源切换 ──────────────────────────────────────────────────────────
-  const sourceBar = (
-    <View style={dyn.sectionLabelRow}>
-      <ThemedText style={dyn.sectionLabel}>音源</ThemedText>
-      <View style={dyn.chipRow}>
-        {MUSIC_SOURCES.map((s) => (
-          <StyledButton
-            key={s.id}
-            text={s.name}
-            isSelected={sourceMode === s.id}
-            variant="default"
-            onPress={() => switchSource(s.id)}
-            style={dyn.pill}
-            textStyle={dyn.pillText}
-          />
-        ))}
+      <View style={dyn.headerActions}>
+        <TouchableOpacity
+          style={dyn.roundButton}
+          onPress={discoverOpen ? () => setDiscoverOpen(false) : openDiscover}
+          accessibilityLabel={discoverOpen ? "收起发现音乐" : "展开发现音乐"}
+          activeOpacity={0.75}
+        >
+          <MoreHorizontal size={20} color={Colors.text.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[dyn.roundButton, dyn.roundButtonAccent]}
+          onPress={() => setAddModalVisible(true)}
+          accessibilityLabel="添加音源"
+          activeOpacity={0.75}
+        >
+          <Plus size={20} color={Colors.brand.onAccent} />
+        </TouchableOpacity>
       </View>
     </View>
   );
 
-  // ── ③ 常驻搜索框：始终可见，且不再被折叠面板 / 负边距遮挡 ───────────────
+  // ── 常驻搜索栏：始终可见且可输入，避免再次出现「搜索框无法输入」 ────────
   const searchRow = (
     <View style={dyn.searchRow}>
       <View style={dyn.searchBox}>
         <Search size={16} color={Colors.text.tertiary} />
         <TextInput
+          ref={searchRef}
           style={dyn.searchInput}
           placeholder="搜索歌名 / 歌手，或点下方热词"
           placeholderTextColor={Colors.text.disabled}
@@ -538,21 +555,36 @@ export default function MusicScreen() {
     />
   ) : null;
 
-  // ── ④ 次级筛选（可折叠）────────────────────────────────────────────────
-  const filterToggle = (
-    <TouchableOpacity style={dyn.filterToggle} onPress={() => setFiltersOpen((v) => !v)} activeOpacity={0.8}>
-      <View style={dyn.filterToggleLeft}>
-        <Globe size={15} color={Colors.brand.accent} />
-        <ThemedText style={dyn.filterToggleText} numberOfLines={1}>
-          {[genre !== "全部" ? genre : null, country !== "全部" ? country : null].filter(Boolean).join(" · ") || "全部风格 · 全部地区"}
-        </ThemedText>
+  const errorBanner = error ? (
+    <View style={dyn.errorBanner}>
+      <RefreshCw size={13} color="#FFB86B" />
+      <ThemedText style={dyn.errorBannerText} numberOfLines={2}>{error}</ThemedText>
+    </View>
+  ) : null;
+
+  // ── 可折叠「发现音乐」面板：音源 + 风格 / 地区 / 歌单，收起后即沉浸式 ──
+  const sourceBar = (
+    <View style={dyn.sectionLabelRow}>
+      <ThemedText style={dyn.sectionLabel}>音源</ThemedText>
+      <View style={dyn.chipRow}>
+        {MUSIC_SOURCES.map((s) => (
+          <StyledButton
+            key={s.id}
+            text={s.name}
+            isSelected={sourceMode === s.id}
+            variant="default"
+            onPress={() => switchSource(s.id)}
+            style={dyn.pill}
+            textStyle={dyn.pillText}
+          />
+        ))}
       </View>
-      <ThemedText style={dyn.filterToggleArrow}>{filtersOpen ? "收起筛选" : "展开筛选"}</ThemedText>
-    </TouchableOpacity>
+    </View>
   );
 
-  const filterPanel = filtersOpen ? (
-    <View style={dyn.filterPanel}>
+  const discoverPanel = discoverOpen ? (
+    <View style={dyn.discoverPanel}>
+      {sourceBar}
       <ThemedText style={dyn.fieldLabel}>风格</ThemedText>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
         {MUSIC_GENRES.map((g) => (
@@ -560,7 +592,10 @@ export default function MusicScreen() {
             onPress={() => switchFilter(g, country)} style={dyn.pill} textStyle={dyn.pillText} />
         ))}
       </ScrollView>
-      <ThemedText style={dyn.fieldLabel}>地区</ThemedText>
+      <View style={dyn.fieldLabelRow}>
+        <Globe size={13} color={Colors.brand.accent} />
+        <ThemedText style={dyn.fieldLabel}>地区</ThemedText>
+      </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
         {MUSIC_COUNTRIES.map((c) => (
           <StyledButton key={c} text={c} isSelected={country === c} variant="default"
@@ -582,37 +617,64 @@ export default function MusicScreen() {
     </View>
   ) : null;
 
-  const errorBanner = error ? (
-    <View style={dyn.errorBanner}>
-      <RefreshCw size={13} color="#FFB86B" />
-      <ThemedText style={dyn.errorBannerText} numberOfLines={2}>{error}</ThemedText>
-    </View>
-  ) : null;
+  // ── 沉浸式「正在播放」：氛围光晕 + 大封面 + 五键 + 四工具 ──────────────
+  const hero = (
+    <LinearGradient
+      colors={[`${accent}2E`, `${accent}0D`, Colors.surface.base]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={[dyn.heroBackdrop, !isWide && dyn.heroBackdropCompact]}
+    >
+      {/* 封面光晕 */}
+      <View style={[
+        dyn.coverGlow,
+        {
+          width: coverSize * 1.3,
+          height: coverSize * 1.3,
+          borderRadius: coverSize * 0.65,
+          marginLeft: -coverSize * 0.65,
+          backgroundColor: `${accent}26`,
+        },
+      ]} />
 
-  // ── ⑤ 正在播放 ─────────────────────────────────────────────────────────
-  const playerPanel = (
-    <View style={[dyn.playerPanel, !isWide && dyn.playerPanelCompact]}>
-      <View style={dyn.playerStateRow}>
-        <View style={[dyn.stateDot, { backgroundColor: playback.isPlaying ? Colors.brand.live : Colors.text.disabled }]} />
-        <ThemedText style={dyn.stateText}>{stateLabel}</ThemedText>
-        <ThemedText style={dyn.sourceTag} numberOfLines={1}>{currentTrack?.source ?? "ZTV"}</ThemedText>
-        <TouchableOpacity onPress={() => void handleStop()} style={dyn.stopTextButton}>
-          <Square size={12} color={Colors.text.secondary} />
-          <ThemedText style={dyn.stopText}>停止</ThemedText>
-        </TouchableOpacity>
+      <View style={dyn.heroTopRow}>
+        <View style={dyn.stateBadge}>
+          <View style={[dyn.stateDot, { backgroundColor: playback.isPlaying ? Colors.brand.accent : Colors.text.disabled }]} />
+          <ThemedText style={dyn.stateText}>{stateLabel}</ThemedText>
+        </View>
+        <ThemedText style={dyn.heroSource} numberOfLines={1}>
+          {currentTrack?.source ?? "ZTV MUSIC"}
+        </ThemedText>
       </View>
 
       {currentTrack?.cover ? (
-        <Image source={{ uri: currentTrack.cover }} style={dyn.heroCover} resizeMode="cover" />
+        <Image
+          source={{ uri: currentTrack.cover }}
+          style={[dyn.heroCover, { width: coverSize, height: coverSize, borderRadius: Math.round(coverSize * 0.09) }]}
+          resizeMode="cover"
+        />
       ) : (
-        <LinearGradient colors={[currentTrack?.accent ?? "#00E6A8", Colors.surface.raised]} style={dyn.heroCover}>
-          <Music2 size={isWide ? 48 : 28} color="rgba(255,255,255,0.85)" />
+        <LinearGradient
+          colors={[accent, `${accent}55`, Colors.surface.raised]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[dyn.heroCover, { width: coverSize, height: coverSize, borderRadius: Math.round(coverSize * 0.09) }]}
+        >
+          <Music2 size={Math.round(coverSize * 0.28)} color="rgba(255,255,255,0.9)" />
         </LinearGradient>
       )}
-      <ThemedText style={dyn.nowTitle} numberOfLines={1}>{currentTrack?.title ?? "选择一首曲目"}</ThemedText>
-      <ThemedText style={dyn.nowArtist} numberOfLines={1}>
-        {currentTrack ? `${currentTrack.artist} · ${currentTrack.album ?? ""}` : "点击列表即可播放"}
-      </ThemedText>
+
+      <View style={dyn.nowRow}>
+        <View style={dyn.nowText}>
+          <ThemedText style={dyn.nowTitle} numberOfLines={1}>{currentTrack?.title ?? "选择一首曲目"}</ThemedText>
+          <ThemedText style={dyn.nowArtist} numberOfLines={1}>
+            {currentTrack ? `${currentTrack.artist} · ${currentTrack.album ?? ""}` : "点击列表即可播放"}
+          </ThemedText>
+        </View>
+        <TouchableOpacity onPress={() => void handleStop()} style={dyn.stopRound} accessibilityLabel="停止播放" activeOpacity={0.75}>
+          <Square size={16} color={Colors.brand.accent} />
+        </TouchableOpacity>
+      </View>
 
       {currentTrack?.isLive ? (
         <View style={dyn.liveRow}>
@@ -620,8 +682,7 @@ export default function MusicScreen() {
           <ThemedText style={dyn.liveRowText}>LIVE · 连续音乐流，进度不可用</ThemedText>
         </View>
       ) : (
-        <View style={dyn.progressRow}>
-          <ThemedText style={dyn.timeText}>{formatTime(playback.positionMs)}</ThemedText>
+        <>
           <TouchableOpacity
             style={dyn.progressTrack}
             activeOpacity={1}
@@ -632,49 +693,81 @@ export default function MusicScreen() {
               void audioPlayer.seekTo(ratio * playback.durationMs);
             }}
           >
-            <View style={[dyn.progressFill, { width: `${Math.min(100, progress * 100)}%` }]} />
+            <View style={[dyn.progressFill, { width: `${progressPercent}%` }]} />
+            <View style={[dyn.progressKnob, { left: `${progressPercent}%` }]} />
           </TouchableOpacity>
-          <ThemedText style={dyn.timeText}>
-            {playback.durationMs ? formatTime(playback.durationMs) : currentTrack?.durationLabel ?? "--:--"}
-          </ThemedText>
-        </View>
+          <View style={dyn.timeRow}>
+            <ThemedText style={dyn.timeText}>{formatTime(playback.positionMs)}</ThemedText>
+            <ThemedText style={dyn.timeText}>
+              {playback.durationMs ? formatTime(playback.durationMs) : currentTrack?.durationLabel ?? "--:--"}
+            </ThemedText>
+          </View>
+        </>
       )}
 
+      {/* 五键控制：随机 / 上一首 / 播放 / 下一首 / 循环 */}
       <View style={dyn.controls}>
-        <StyledButton variant="ghost" onPress={cycleRepeat} style={dyn.ctrlSmall}>
-          {repeatMode === "one" ? <Repeat1 size={18} color={Colors.brand.accent} />
-            : <Repeat size={18} color={repeatMode === "off" ? Colors.text.tertiary : Colors.brand.accent} />}
-        </StyledButton>
-        <StyledButton variant="ghost" onPress={() => void handlePrev()} style={dyn.ctrlBtn}>
-          <SkipBack size={deviceType === "tv" ? 28 : 22} color="#fff" />
-        </StyledButton>
-        <TouchableOpacity style={dyn.playBtn} onPress={() => void handleToggle()} activeOpacity={0.8}>
-          {playback.isPlaying
-            ? <Pause size={deviceType === "tv" ? 34 : 26} color={Colors.brand.onAccent} />
-            : <Play size={deviceType === "tv" ? 34 : 26} color={Colors.brand.onAccent} />}
+        <TouchableOpacity onPress={toggleShuffle} style={dyn.ctrlSide} accessibilityLabel="随机播放" activeOpacity={0.75}>
+          <Shuffle size={20} color={shuffle ? Colors.brand.accent : Colors.text.secondary} />
         </TouchableOpacity>
-        <StyledButton variant="ghost" onPress={() => void handleNext()} style={dyn.ctrlBtn}>
-          <SkipForward size={deviceType === "tv" ? 28 : 22} color="#fff" />
-        </StyledButton>
-        <StyledButton variant="ghost" onPress={toggleShuffle} style={dyn.ctrlSmall}>
-          <Shuffle size={18} color={shuffle ? Colors.brand.accent : Colors.text.tertiary} />
-        </StyledButton>
+        <TouchableOpacity onPress={() => void handlePrev()} style={dyn.ctrlBtn} accessibilityLabel="上一首" activeOpacity={0.75}>
+          <SkipBack size={isTVLike ? 28 : 24} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={dyn.playBtn} onPress={() => void handleToggle()} accessibilityLabel="播放或暂停" activeOpacity={0.8}>
+          {playback.isPlaying
+            ? <Pause size={isTVLike ? 34 : 28} color={Colors.brand.onAccent} />
+            : <Play size={isTVLike ? 34 : 28} color={Colors.brand.onAccent} />}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => void handleNext()} style={dyn.ctrlBtn} accessibilityLabel="下一首" activeOpacity={0.75}>
+          <SkipForward size={isTVLike ? 28 : 24} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={cycleRepeat} style={dyn.ctrlSide} accessibilityLabel="循环模式" activeOpacity={0.75}>
+          {repeatMode === "one"
+            ? <Repeat1 size={20} color={Colors.brand.accent} />
+            : <Repeat size={20} color={repeatMode === "off" ? Colors.text.secondary : Colors.brand.accent} />}
+        </TouchableOpacity>
       </View>
 
-      <View style={dyn.volumeRow}>
-        <Volume2 size={15} color={Colors.text.secondary} />
-        {[0.25, 0.5, 0.75, 1].map((v) => (
-          <TouchableOpacity key={v}
-            onPress={() => { setVolume(v); void audioPlayer.setVolume(v); }}
-            style={[dyn.volumeChip, volume === v && dyn.volumeChipActive]}>
-            <ThemedText style={dyn.volumeText}>{Math.round(v * 100)}%</ThemedText>
+      {/* 四工具图标：曲目列表 / 歌词 / 音量 / 刷新音源，均为真实功能 */}
+      <View style={dyn.toolRow}>
+        {([
+          { label: "列表", active: listVisible, onPress: () => setListVisible((v) => !v),
+            icon: <ListMusic size={19} color={listVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+          { label: "歌词", active: lyricsVisible, onPress: () => setLyricsVisible((v) => !v),
+            icon: <Mic2 size={19} color={lyricsVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+          { label: "音量", active: volumeVisible, onPress: () => setVolumeVisible((v) => !v),
+            icon: <Volume2 size={19} color={volumeVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+          { label: "刷新", active: false, onPress: () => switchSource(sourceMode),
+            icon: <RefreshCw size={19} color={Colors.text.secondary} /> },
+        ] as const).map((t) => (
+          <TouchableOpacity
+            key={t.label}
+            onPress={t.onPress}
+            style={[dyn.toolButton, t.active && dyn.toolButtonActive]}
+            accessibilityLabel={t.label}
+            activeOpacity={0.75}
+          >
+            {t.icon}
+            <ThemedText style={[dyn.toolLabel, t.active && dyn.toolLabelActive]}>{t.label}</ThemedText>
           </TouchableOpacity>
         ))}
       </View>
 
+      {volumeVisible && (
+        <View style={dyn.volumeRow}>
+          {[0.25, 0.5, 0.75, 1].map((v) => (
+            <TouchableOpacity key={v}
+              onPress={() => { setVolume(v); void audioPlayer.setVolume(v); }}
+              style={[dyn.volumeChip, volume === v && dyn.volumeChipActive]}>
+              <ThemedText style={dyn.volumeText}>{Math.round(v * 100)}%</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       {!!playback.error && <ThemedText style={dyn.errorText}>{playback.error}</ThemedText>}
 
-      {isWide && (
+      {lyricsVisible && (
         <View style={dyn.lyricsBox}>
           <ThemedText style={dyn.lyricsTitle}>歌词 / 说明</ThemedText>
           <ScrollView showsVerticalScrollIndicator={false}>
@@ -684,7 +777,7 @@ export default function MusicScreen() {
           </ScrollView>
         </View>
       )}
-    </View>
+    </LinearGradient>
   );
 
   const listTitle = (
@@ -697,38 +790,25 @@ export default function MusicScreen() {
     </View>
   );
 
-  const body = isWide ? (
-    <View style={dyn.bodyWide}>
-      <View style={dyn.listPanel}>
-        {listTitle}
-        <FlatList data={displayTracks} renderItem={renderTrack} keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={<ThemedText style={dyn.emptyText}>{emptyText}</ThemedText>} />
-      </View>
-      {playerPanel}
-    </View>
-  ) : (
-    <View style={dyn.bodyNarrow}>
-      {playerPanel}
+  const listPanel = listVisible ? (
+    <View style={[dyn.listPanel, !isWide && dyn.listPanelCompact]}>
+      {listTitle}
       <FlatList
         data={displayTracks}
         renderItem={renderTrack}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={dyn.listContent}
-        ListHeaderComponent={
-          <View>
-            {sourceBar}
-            {searchRow}
-            {keyboard}
-            {errorBanner}
-            {filterToggle}
-            {filterPanel}
-            {listTitle}
-          </View>
-        }
         ListEmptyComponent={<ThemedText style={dyn.emptyText}>{emptyText}</ThemedText>}
       />
+    </View>
+  ) : null;
+
+  // 宽屏：沉浸式播放器为主栏，曲目列表退到次栏；窄屏：播放器置顶、列表在下
+  const body = (
+    <View style={isWide ? dyn.bodyWide : dyn.bodyNarrow}>
+      {hero}
+      {listPanel}
     </View>
   );
 
@@ -766,16 +846,10 @@ export default function MusicScreen() {
   const content = (
     <ThemedView style={[commonStyles.container, dyn.container]}>
       {pageHeader}
-      {isWide && (
-        <>
-          {sourceBar}
-          {searchRow}
-          {keyboard}
-          {errorBanner}
-          {filterToggle}
-          {filterPanel}
-        </>
-      )}
+      {searchRow}
+      {keyboard}
+      {errorBanner}
+      {discoverPanel}
       {body}
       {modal}
     </ThemedView>
@@ -795,6 +869,8 @@ const createStyles = (deviceType: string, spacing: number) => {
   const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
   return StyleSheet.create({
     container: { flex: 1, paddingTop: isTV ? 40 : 0, paddingHorizontal: spacing, paddingBottom: spacing },
+
+    /* 设计稿页头 */
     pageHeader: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
       marginBottom: spacing, marginTop: isTV ? spacing : spacing / 2, gap: 8,
@@ -805,14 +881,17 @@ const createStyles = (deviceType: string, spacing: number) => {
       width: isTV ? 44 : 36, height: isTV ? 44 : 36, borderRadius: 12,
       alignItems: "center", justifyContent: "center",
     },
-    pageTitle: { fontSize: isTV ? 30 : 22, fontWeight: "bold" },
+    pageTitle: { fontSize: isTV ? 28 : 20, fontWeight: "bold" },
     pageSubtitle: { fontSize: 11, color: Colors.text.tertiary, marginTop: 2 },
-    addButton: { borderRadius: 20, paddingHorizontal: 18 },
+    headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+    roundButton: {
+      width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: isTV ? 22 : 19,
+      alignItems: "center", justifyContent: "center",
+      backgroundColor: Colors.surface.overlay, borderWidth: 1, borderColor: Colors.surface.border,
+    },
+    roundButtonAccent: { backgroundColor: Colors.brand.accent, borderColor: Colors.brand.accent },
 
-    sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: spacing, flexWrap: "wrap" },
-    sectionLabel: { fontSize: 12, fontWeight: "600", color: Colors.text.tertiary },
-    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-
+    /* 常驻搜索栏 */
     searchRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing },
     searchBox: {
       flex: 1, minWidth: 120, flexDirection: "row", alignItems: "center", gap: 8,
@@ -828,6 +907,19 @@ const createStyles = (deviceType: string, spacing: number) => {
     searchButton: { borderRadius: 20, paddingHorizontal: 14, height: isTV ? 48 : 42, justifyContent: "center" },
     searchButtonText: { fontSize: 13 },
 
+    /* 可折叠发现面板 */
+    discoverPanel: {
+      borderRadius: 16, borderWidth: 1, borderColor: Colors.surface.border,
+      backgroundColor: Colors.surface.raised, padding: 12, marginBottom: spacing,
+    },
+    sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" },
+    sectionLabel: { fontSize: 12, fontWeight: "600", color: Colors.text.tertiary },
+    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+    fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    fieldLabel: { fontSize: 11, color: Colors.text.tertiary, marginBottom: 6 },
+    filterBar: { marginBottom: 10, flexGrow: 0 },
+    pill: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
+    pillText: { fontSize: 12 },
     errorBanner: {
       flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginBottom: spacing,
       borderRadius: 10, backgroundColor: "rgba(255,184,107,0.10)",
@@ -835,79 +927,106 @@ const createStyles = (deviceType: string, spacing: number) => {
     },
     errorBannerText: { flex: 1, color: "#FFB86B", fontSize: 12 },
 
-    filterToggle: {
-      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      minHeight: 44, paddingHorizontal: 14, marginBottom: filtersGap(spacing),
-      borderRadius: 12, borderWidth: 1, borderColor: Colors.surface.border,
-      backgroundColor: Colors.surface.raised,
-    },
-    filterToggleLeft: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-    filterToggleText: { fontSize: 13, fontWeight: "600", color: Colors.text.primary },
-    filterToggleArrow: { fontSize: 12, fontWeight: "600", color: Colors.brand.accent },
-    filterPanel: {
-      borderRadius: 12, borderWidth: 1, borderColor: Colors.surface.border,
-      backgroundColor: Colors.surface.raised, padding: 12, marginBottom: spacing,
-    },
-    fieldLabel: { fontSize: 11, color: Colors.text.tertiary, marginBottom: 6 },
-    filterBar: { marginBottom: 10, flexGrow: 0 },
-    pill: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
-    pillText: { fontSize: 12 },
-
+    /* 主体：播放器为主角 */
     bodyWide: { flex: 1, flexDirection: "row", gap: spacing, minHeight: 0 },
-    bodyNarrow: { flex: 1, minHeight: 0 },
-    listContent: { paddingBottom: spacing },
-    listPanel: {
-      flex: 1.25, minWidth: 0, backgroundColor: Colors.surface.raised, borderRadius: 16,
-      borderWidth: 1, borderColor: Colors.surface.border, padding: spacing,
+    bodyNarrow: { flex: 1, flexDirection: "column", gap: spacing, minHeight: 0 },
+    heroBackdrop: {
+      flex: 1.45, minWidth: 0, borderRadius: 24, padding: isTV ? 24 : 18,
+      alignItems: "center", overflow: "hidden", position: "relative",
+      borderWidth: 1, borderColor: Colors.surface.border,
     },
-    panelHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, marginTop: isWide ? 0 : 4 },
-    panelTitle: { fontSize: 15, fontWeight: "600", flex: 1 },
-    panelHint: { fontSize: 11, color: Colors.text.tertiary },
-
-    playerPanel: {
-      flex: 1, minWidth: 0, backgroundColor: Colors.surface.raised, borderRadius: 16,
-      borderWidth: 1, borderColor: Colors.surface.border, padding: spacing, alignItems: "center",
+    heroBackdropCompact: { flex: 0 },
+    coverGlow: { position: "absolute", top: 10, left: "50%" },
+    heroTopRow: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      width: "100%", gap: 8, zIndex: 1,
     },
-    playerPanelCompact: { flex: 0, marginBottom: spacing },
-    playerStateRow: { flexDirection: "row", alignItems: "center", gap: 8, width: "100%", marginBottom: 10 },
-    stateDot: { width: 8, height: 8, borderRadius: 4 },
-    stateText: { fontSize: 12, fontWeight: "700", color: Colors.text.primary },
-    sourceTag: { flex: 1, fontSize: 10, color: Colors.text.tertiary },
-    stopTextButton: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4,
-      borderRadius: 12, borderWidth: 1, borderColor: Colors.surface.border },
-    stopText: { fontSize: 11, color: Colors.text.secondary },
+    stateBadge: {
+      flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5,
+      borderRadius: 12, backgroundColor: "rgba(0,0,0,0.28)",
+    },
+    stateDot: { width: 7, height: 7, borderRadius: 4 },
+    stateText: { fontSize: 11, fontWeight: "600", color: "#fff" },
+    heroSource: { fontSize: 10, color: "rgba(255,255,255,0.72)", flexShrink: 1, textAlign: "right" },
     heroCover: {
-      width: isTV ? 170 : isWide ? 140 : 76, height: isTV ? 170 : isWide ? 140 : 76,
-      borderRadius: 18, alignItems: "center", justifyContent: "center", marginBottom: 10, overflow: "hidden",
+      alignItems: "center", justifyContent: "center", overflow: "hidden",
+      marginTop: isTV ? 18 : 14, marginBottom: isTV ? 16 : 12, zIndex: 1,
     },
-    nowTitle: { fontSize: isTV ? 26 : isWide ? 20 : 17, fontWeight: "bold", textAlign: "center" },
-    nowArtist: { fontSize: 11, color: Colors.text.tertiary, marginTop: 3, textAlign: "center" },
-    liveRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing },
+    nowRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 10, zIndex: 1 },
+    nowText: { flex: 1, minWidth: 0 },
+    nowTitle: { fontSize: isTV ? 28 : isWide ? 22 : 19, fontWeight: "bold", color: "#fff" },
+    nowArtist: { fontSize: 11, color: Colors.text.secondary, marginTop: 4 },
+    stopRound: {
+      width: isTV ? 42 : 36, height: isTV ? 42 : 36, borderRadius: isTV ? 21 : 18,
+      alignItems: "center", justifyContent: "center",
+      backgroundColor: "rgba(0,0,0,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)",
+    },
+
+    /* 进度条 */
+    liveRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing, zIndex: 1 },
     liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.brand.live },
     liveRowText: { fontSize: 11, color: Colors.text.secondary },
-    progressRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 8, marginTop: spacing },
-    timeText: { fontSize: 11, color: Colors.text.tertiary, minWidth: 40, textAlign: "center" },
-    progressTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: Colors.surface.overlay, overflow: "hidden" },
-    progressFill: { height: "100%", backgroundColor: Colors.brand.accent, borderRadius: 3 },
-    controls: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: isTV ? 16 : 6, marginTop: 10 },
-    ctrlSmall: { padding: 6, borderRadius: 20 },
-    ctrlBtn: { padding: 8, borderRadius: 24 },
-    playBtn: {
-      width: isTV ? 64 : 50, height: isTV ? 64 : 50, borderRadius: isTV ? 32 : 25,
-      backgroundColor: Colors.brand.accent, alignItems: "center", justifyContent: "center",
+    progressTrack: {
+      flexDirection: "row", width: "100%", height: 6, borderRadius: 3,
+      backgroundColor: Colors.surface.overlay, marginTop: isTV ? 18 : 14, zIndex: 1,
     },
-    volumeRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 10, flexWrap: "wrap", justifyContent: "center" },
-    volumeChip: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 12, backgroundColor: Colors.surface.overlay },
+    progressFill: { height: "100%", backgroundColor: Colors.brand.accent, borderRadius: 3 },
+    progressKnob: {
+      position: "absolute", top: -2, width: 10, height: 10, marginLeft: -5,
+      borderRadius: 5, backgroundColor: "#fff",
+    },
+    timeRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 6, zIndex: 1 },
+    timeText: { fontSize: 11, color: Colors.text.tertiary },
+
+    /* 五键控制 + 四工具 */
+    controls: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      width: "100%", maxWidth: 420, marginTop: isTV ? 18 : 14, zIndex: 1,
+    },
+    ctrlSide: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+    ctrlBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+    playBtn: {
+      width: isTV ? 72 : 60, height: isTV ? 72 : 60, borderRadius: isTV ? 36 : 30,
+      backgroundColor: Colors.brand.accent, alignItems: "center", justifyContent: "center",
+      shadowColor: Colors.brand.accent, shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 0 },
+    },
+    toolRow: {
+      flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+      width: "100%", maxWidth: 420, marginTop: isTV ? 18 : 14, zIndex: 1, gap: 8,
+    },
+    toolButton: {
+      flex: 1, alignItems: "center", justifyContent: "center", gap: 3,
+      minHeight: isTV ? 58 : 50, borderRadius: 16,
+      backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: Colors.surface.border,
+    },
+    toolButtonActive: { backgroundColor: "rgba(0,230,168,0.12)", borderColor: "rgba(0,230,168,0.45)" },
+    toolLabel: { fontSize: 10, color: Colors.text.tertiary },
+    toolLabelActive: { color: Colors.brand.accent },
+    volumeRow: {
+      flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10,
+      flexWrap: "wrap", justifyContent: "center", zIndex: 1,
+    },
+    volumeChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: Colors.surface.overlay },
     volumeChipActive: { backgroundColor: "rgba(0,230,168,0.2)", borderWidth: 1, borderColor: Colors.brand.accent },
     volumeText: { fontSize: 11 },
-    errorText: { color: "#ff6b6b", fontSize: 12, marginTop: 8, textAlign: "center" },
+    errorText: { color: "#ff6b6b", fontSize: 12, marginTop: 8, textAlign: "center", zIndex: 1 },
     lyricsBox: {
       width: "100%", marginTop: spacing, paddingTop: spacing,
-      borderTopWidth: 1, borderTopColor: Colors.surface.border, maxHeight: isTV ? 150 : 100,
+      borderTopWidth: 1, borderTopColor: Colors.surface.border, maxHeight: isTV ? 140 : 90, zIndex: 1,
     },
     lyricsTitle: { fontSize: 12, fontWeight: "600", marginBottom: 6, color: Colors.brand.accent },
     lyricsLine: { fontSize: 12, color: Colors.text.secondary, textAlign: "center", lineHeight: 20 },
 
+    /* 曲目列表（次栏） */
+    listPanel: {
+      flex: 1, minWidth: 0, backgroundColor: Colors.surface.raised, borderRadius: 20,
+      borderWidth: 1, borderColor: Colors.surface.border, padding: spacing,
+    },
+    listPanelCompact: { flex: 1, minHeight: 180 },
+    listContent: { paddingBottom: spacing },
+    panelHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+    panelTitle: { fontSize: 14, fontWeight: "600", flex: 1 },
+    panelHint: { fontSize: 11, color: Colors.text.tertiary },
     trackRow: {
       flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 8,
       borderRadius: 10, marginBottom: 4, minHeight: 52,
@@ -928,6 +1047,7 @@ const createStyles = (deviceType: string, spacing: number) => {
     deleteBtn: { marginLeft: 8, padding: 4 },
     emptyText: { fontSize: 13, color: Colors.text.tertiary, textAlign: "center", padding: 20 },
 
+    /* 添加音源弹窗 */
     modalOverlay: { flex: 1, backgroundColor: Colors.surface.scrim, alignItems: "center", justifyContent: "center", padding: 24 },
     modalCard: {
       width: "100%", maxWidth: 520, backgroundColor: Colors.surface.raised, borderRadius: 16,
@@ -952,6 +1072,3 @@ const createStyles = (deviceType: string, spacing: number) => {
     modalBtn: { borderRadius: 20, paddingHorizontal: 18 },
   });
 };
-
-/** 折叠面板与触发条之间保持一个稳定的小间距，避免负边距互相遮挡输入区 */
-const filtersGap = (spacing: number) => Math.max(6, Math.round(spacing / 2));

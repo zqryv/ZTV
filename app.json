@@ -36,7 +36,7 @@
     },
     "name": "ZTV",
     "slug": "ZTV",
-    "version": "2.2.0",
+    "version": "2.2.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "dark",

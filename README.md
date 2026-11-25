@@ -4,6 +4,13 @@
 
 ## ✨ ZTV 功能
 
+### v2.2.1 按设计方案替换音乐播放 / 收音机界面
+
+- **设计方案落地**：参考工作区已有的 Ardot 设计稿「18 音乐播放器」「19 收音机」（fileId `750387664062996`），替换 `app/music.tsx` 与 `app/radio.tsx` 的界面层。沿用设计语言的暗色沉浸 `#0B0E13`、青绿 `#00E6A8`、圆角卡片与胶囊控件、胶囊式底部导航。
+- **音乐播放**：改为沉浸式「正在播放」——氛围光晕渐变 + 按屏宽自适应的大方形封面 + 曲目信息 + 带滑块的进度条 + 五键控制（随机 / 上一首 / 播放 / 下一首 / 循环）+ 四工具图标（列表 / 歌词 / 音量 / 刷新）；音源、风格、地区、歌单收进可折叠的「发现音乐」面板，宽屏以播放器为主栏、曲目列表退到次栏。
+- **收音机**：全宽「调谐器焦点卡」（正在播出徽标 / FM 频率 / 台名 / 波形律动 / 四个圆形控制）→「探索电台」+ 一行常显分类胶囊 → 电台卡片（彩色图标 / 来源 / 编码 / 播放态）；地区、在线目录、音量收进折叠面板，宽屏电台卡片按两列网格排布。
+- **功能零回退**：常驻可输入的搜索框、屏幕键盘与中文热词、三音源三级降级、28 个内置电台、在线目录刷新、自定义音源增删、TV 遥控器、`useFocusEffect` 失焦停止与资源释放全部保留；`useAudioStore` / `audioPlayer` / `onlineMusic` / `AudioLibrary` 等数据接口未改动。
+
 ### v2.2.0 音乐播放 / 收音机重构与播放生命周期修复
 
 - **两个界面重新规划布局**：音乐页按「音源 → 搜索 → 筛选 → 正在播放 → 曲目列表」分层，大屏左侧列表 / 右侧固定播放器；收音机页按「正在收听 → 来源与筛选 → 电台列表」分层，卡片标注国家、分类、编码与来源。两页都新增醒目的「停止」操作与播放状态标识。
@@ -68,7 +75,7 @@
 | `services/onlineMusic.ts` | iTunes 在线音乐搜索 + radio-browser 在线电台（带超时与镜像容错） |
 | `services/audioPlayer.ts`、`stores/audioStore.ts` | 基于 `expo-av` 的播放服务与歌单/电台状态、自定义音源与在线结果持久化；播放超时、备用地址回退、停止释放资源 |
 | `hooks/useAudioLifecycle.ts`、`app/_layout.tsx` | 应用退后台 / 硬件返回 / Web 隐藏时停止播放并释放音频会话 |
-| `app/music.tsx`、`app/radio.tsx`、`constants/AudioLibrary.ts` | 两页布局重做、屏幕键盘输入、三音源聚合与降级、28 个内置可用电台 |
+| `app/music.tsx`、`app/radio.tsx` | 按 Ardot 设计稿重排界面：沉浸式正在播放（光晕 / 大封面 / 五键 / 四工具）与调谐器焦点卡（FM 频率 / 波形 / 分类胶囊 / 电台卡片），功能与数据接口保持不变 |
 | `scripts/verifyAudioSources.js`、`services/__tests__/*` | 音源真实可用性体检与音频生命周期 / 地区回退回归测试 |
 | `services/api.ts`、`stores/authStore.ts`、`components/PosterImage.tsx` | 请求超时、登录检查去重提速、海报代理优先加载 |
 | `constants/UpdateConfig.ts`、`services/updateService.ts`、`stores/updateStore.ts` | Releases API 优先 + 三镜像回退、按平台选包、浏览器下载兜底、版本比对修正 |
@@ -95,7 +102,7 @@ yarn typecheck       # TypeScript 类型检查
 
 ## 📦 各平台安装版本
 
-仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.2.0`）：
+仓库的 GitHub Releases 中提供以下安装包（版本号形如 `v2.2.1`）：
 
 | 平台 | 资源文件 | 安装方式 |
 | --- | --- | --- |
