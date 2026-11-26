@@ -164,7 +164,7 @@ export default function HomeScreen() {
   };
 
   const renderCategory = ({ item }: { item: Category }) => {
-    // 入口分类（电视/音乐台/音乐播放/收音机）与「电影」等内容分类使用完全相同的胶囊样式：
+    // 入口分类（电视/音乐台/音乐在线/收音机）与「电影」等内容分类使用完全相同的胶囊样式：
     // 同款 variant、同款 categoryButton / categoryText，不附加图标、描边或品牌色。
     const isSelected = !isEntryCategory(item) && selectedCategory?.title === item.title;
     return (

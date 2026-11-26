@@ -1,7 +1,11 @@
 /**
- * 搜索页内置屏幕键盘。
- * 面向电视 / 机顶盒遥控器与触屏设备：直接点选字母、数字即可输入拼音首字母，
- * 例如依次点击 Q / Y / N 即可搜索「庆余年」。无需系统输入法或物理键盘。
+ * 搜索页 / 音乐在线页内置屏幕键盘（v2.3.0 紧凑化）。
+ *
+ * 设计稿要点：
+ * - 大屏键盘收进左栏独立面板（电视仅占约 40% 宽），不再铺满全屏；
+ * - 按键宽度由「面板宽度」推导，传入 panelWidth 即可自适应分栏；
+ * - 当前字母用翡翠绿填充 + 发光描边，遥控器焦点明确；
+ * - 手机端按键与行距收紧，键盘不再挤占热搜 / 曲目区域。
  */
 import React, { useState } from "react";
 import {
@@ -14,10 +18,12 @@ import {
 import { X } from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { useCompactLayout } from "@/utils/DesignTokens";
 import { Colors } from "@/constants/Colors";
 
 const LETTER_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 const NUMBER_ROWS = ["1234567890", "-/:;()@&\""];
+const FOCUS_KEYS = new Set([...LETTER_ROWS.join(""), ...NUMBER_ROWS.join("")]);
 
 interface SearchKeyboardProps {
   visible: boolean;
@@ -32,6 +38,8 @@ interface SearchKeyboardProps {
   /** 可选：一键输入的热词（中文歌手 / 风格），解决遥控器无法输入中文的问题 */
   quickTerms?: string[];
   onQuickTerm?: (term: string) => void;
+  /** 可选：面板实际宽度。分栏时传左栏宽度，键盘按此收紧；不传则沿用整屏宽度 */
+  panelWidth?: number;
 }
 
 interface KeyButtonProps extends TouchableOpacityProps {
@@ -40,9 +48,21 @@ interface KeyButtonProps extends TouchableOpacityProps {
   height: number;
   accent?: boolean;
   preferred?: boolean;
+  /** 当前焦点 / 刚按下的按键：翡翠绿填充 + 发光描边 */
+  highlighted?: boolean;
+  fontSize?: number;
 }
 
-function KeyButton({ label, width, height, accent, preferred, ...rest }: KeyButtonProps) {
+function KeyButton({
+  label,
+  width,
+  height,
+  accent,
+  preferred,
+  highlighted,
+  fontSize,
+  ...rest
+}: KeyButtonProps) {
   return (
     <TouchableOpacity
       activeOpacity={0.65}
@@ -51,10 +71,19 @@ function KeyButton({ label, width, height, accent, preferred, ...rest }: KeyButt
         styles.key,
         { width, height },
         accent && styles.keyAccent,
+        highlighted && styles.keyHighlighted,
       ]}
       {...rest}
     >
-      <ThemedText style={[styles.keyText, accent && styles.keyTextAccent]}>{label}</ThemedText>
+      <ThemedText
+        style={[
+          styles.keyText,
+          fontSize ? { fontSize } : null,
+          (accent || highlighted) && styles.keyTextAccent,
+        ]}
+      >
+        {label}
+      </ThemedText>
     </TouchableOpacity>
   );
 }
@@ -70,80 +99,117 @@ export function SearchKeyboard({
   hint = "输入拼音首字母即可搜中文片名，如 QYN → 庆余年",
   quickTerms,
   onQuickTerm,
+  panelWidth,
 }: SearchKeyboardProps) {
   const [numeric, setNumeric] = useState(false);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const { screenWidth, deviceForm, spacing } = useResponsiveLayout();
+  const metrics = useCompactLayout();
   if (!visible) return null;
 
   const isTV = deviceForm === "tv" || deviceForm === "setTopBox";
-  const gap = isTV ? 8 : 5;
-  const padding = isTV ? 24 : 12;
-  const maxKeyWidth = isTV ? 86 : deviceForm === "phone" ? 40 : 64;
-  const available = Math.max(240, screenWidth - spacing * 2 - padding * 2);
+  const gap = metrics.gapSm;
+  const padding = isTV ? metrics.cardPadding : Math.max(10, metrics.cardPadding - 4);
+  const maxKeyWidth = isTV ? 64 : deviceForm === "phone" ? 34 : 48;
+  // 关键：分栏时按面板宽度计算，键盘不再占满整屏
+  const baseWidth = panelWidth && panelWidth > 0 ? panelWidth : screenWidth - spacing * 2;
+  const available = Math.max(190, baseWidth - padding * 2);
   const letterKeyWidth = Math.min(maxKeyWidth, (available - gap * 9) / 10);
-  const keyHeight = isTV ? 58 : deviceForm === "phone" ? 40 : 48;
+  const keyHeight = metrics.keyHeight;
   const rows = numeric ? NUMBER_ROWS : LETTER_ROWS;
+  const keyFont = metrics.body;
+  const highlight = (key: string) => {
+    if (FOCUS_KEYS.has(key)) setActiveKey(key);
+  };
 
   return (
-    <View style={[styles.container, { padding }]}>
-      <View style={styles.header}>
+    <View style={[styles.container, { padding, borderRadius: metrics.radius }]}>
+      <View style={[styles.header, { marginBottom: gap + 2 }]}>
         <View style={styles.headerTitle}>
-          <ThemedText style={styles.title}>{title}</ThemedText>
-          <ThemedText style={styles.hint}>{hint}</ThemedText>
+          <ThemedText style={[styles.title, { fontSize: metrics.body }]}>{title}</ThemedText>
+          <ThemedText style={[styles.hint, { fontSize: metrics.caption }]} numberOfLines={2}>
+            {hint}
+          </ThemedText>
         </View>
         <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel="收起键盘">
-          <X size={isTV ? 22 : 18} color={Colors.text.secondary} />
+          <X size={isTV ? 20 : 16} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
 
       {!!quickTerms?.length && onQuickTerm && (
-        <View style={styles.quickRow}>
+        <View style={[styles.quickRow, { gap, marginBottom: gap + 2 }]}>
           {quickTerms.map((term) => (
             <TouchableOpacity
               key={term}
               onPress={() => onQuickTerm(term)}
               activeOpacity={0.7}
-              style={styles.quickChip}
+              style={[styles.quickChip, { borderRadius: metrics.radiusSm }]}
             >
-              <ThemedText style={styles.quickChipText}>{term}</ThemedText>
+              <ThemedText style={[styles.quickChipText, { fontSize: metrics.caption }]}>{term}</ThemedText>
             </TouchableOpacity>
           ))}
         </View>
       )}
 
       {rows.map((row, rowIndex) => (
-        <View key={row} style={[styles.row, { marginBottom: gap }]}>
+        <View key={row} style={[styles.row, { gap, marginBottom: gap }]}>
           {row.split("").map((char, colIndex) => (
             <KeyButton
               key={`${row}-${char}-${colIndex}`}
               label={char}
               width={letterKeyWidth}
               height={keyHeight}
+              fontSize={keyFont}
               preferred={rowIndex === 0 && colIndex === 0}
-              onPress={() => onKeyPress(char)}
+              highlighted={activeKey === char}
+              onFocus={() => highlight(char)}
+              onPress={() => {
+                highlight(char);
+                onKeyPress(char);
+              }}
             />
           ))}
         </View>
       ))}
 
-      <View style={[styles.row, { marginTop: 2 }]}>
+      <View style={[styles.row, { gap, marginTop: 2 }]}>
         <KeyButton
           label={numeric ? "ABC" : "123"}
-          width={Math.max(58, letterKeyWidth * 1.5)}
+          width={Math.max(48, letterKeyWidth * 1.5)}
           height={keyHeight}
+          fontSize={keyFont}
           onPress={() => setNumeric((value) => !value)}
         />
-        <KeyButton label="删除" width={Math.max(58, letterKeyWidth * 1.5)} height={keyHeight} onPress={onDelete} />
-        <KeyButton label="清空" width={Math.max(58, letterKeyWidth * 1.5)} height={keyHeight} onPress={onClear} />
+        <KeyButton
+          label="删除"
+          width={Math.max(48, letterKeyWidth * 1.5)}
+          height={keyHeight}
+          fontSize={keyFont}
+          onPress={onDelete}
+        />
+        <KeyButton
+          label="清空"
+          width={Math.max(48, letterKeyWidth * 1.5)}
+          height={keyHeight}
+          fontSize={keyFont}
+          onPress={onClear}
+        />
         <KeyButton
           label="搜索"
-          width={Math.max(72, letterKeyWidth * 2)}
+          width={Math.max(64, letterKeyWidth * 2)}
           height={keyHeight}
+          fontSize={keyFont}
           accent
           preferred={numeric}
           onPress={onSearch}
         />
       </View>
+
+      {metrics.showRemoteHint && (
+        <ThemedText style={[styles.remoteHint, { fontSize: metrics.caption }]}>
+          方向键移动 · OK 确认 · 返回键收起
+        </ThemedText>
+      )}
     </View>
   );
 }
@@ -151,28 +217,24 @@ export function SearchKeyboard({
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.surface.raised,
-    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.surface.border,
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 6,
+    marginBottom: 8,
     ...(Platform.isTV && { borderWidth: 2 }),
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 10,
     gap: 8,
   },
   headerTitle: { flex: 1 },
   title: {
-    fontSize: 14,
     fontWeight: "700",
     color: Colors.brand.accent,
   },
   hint: {
-    fontSize: 11,
     color: Colors.text.tertiary,
     marginTop: 2,
   },
@@ -180,23 +242,19 @@ const styles = StyleSheet.create({
   quickRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginBottom: 10,
   },
   quickChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     backgroundColor: "rgba(0,230,168,0.12)",
     borderWidth: 1,
     borderColor: "rgba(0,230,168,0.35)",
   },
-  quickChipText: { fontSize: 12, color: Colors.brand.accent, fontWeight: "600" },
+  quickChipText: { color: Colors.brand.accent, fontWeight: "600" },
   row: {
     flexDirection: "row",
     justifyContent: "center",
     flexWrap: "nowrap",
-    gap: 5,
   },
   key: {
     alignItems: "center",
@@ -210,12 +268,27 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.brand.accent,
     borderColor: Colors.brand.accent,
   },
+  /** 设计稿：当前字母翡翠绿填充 + 发光描边 */
+  keyHighlighted: {
+    backgroundColor: Colors.brand.accent,
+    borderColor: "#9BFFE0",
+    borderWidth: 2,
+    shadowColor: Colors.brand.accent,
+    shadowOpacity: 0.75,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 6,
+  },
   keyText: {
-    fontSize: 15,
     fontWeight: "600",
     color: Colors.text.primary,
   },
   keyTextAccent: {
     color: Colors.brand.onAccent,
+  },
+  remoteHint: {
+    color: Colors.text.tertiary,
+    textAlign: "right",
+    marginTop: 6,
   },
 });

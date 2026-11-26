@@ -1,7 +1,7 @@
 {
   "name": "ztv-desktop",
   "productName": "ZTV",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "ZTV desktop shell (Windows / Ubuntu / macOS) wrapping the react-native-web build",
   "homepage": "https://github.com/zqryv/ZTV",
   "author": {

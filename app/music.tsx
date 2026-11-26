@@ -1,15 +1,14 @@
 /**
- * 音乐播放页（分类「音乐播放」）。
+ * 音乐在线页（分类「音乐在线」，v2.3.0 按「3 界面 × 4 设备」设计稿收紧布局）。
  *
- * 界面按工作区设计方案「18 音乐播放器 Music Player」（Ardot 设计稿 750387664062996）
- * 重新排布：氛围光晕渐变 + 大方形封面 + 曲目信息 + 进度条 + 五键控制 + 四工具图标，
- * 让「正在播放」成为唯一主角；音源 / 搜索 / 筛选收进可折叠的「发现音乐」面板去杂乱。
+ * - 宽屏：左栏约 38~40% 为「正在播放」卡（封面按栏宽推导，不再撑满整屏）；
+ *   右栏为「发现音乐」——音源 / 风格 / 地区 / 歌单胶囊 + 曲目网格 + 精选歌单；
+ * - 手机：沉浸式单列播放器，搜索与筛选可折叠，避免一屏堆满控件；
+ * - 全部尺寸来自 useCompactLayout，与搜索 / 收音机共用同一标尺。
  *
- * 本次仅替换界面层，以下能力全部沿用 v2.2.0，接口与交互逻辑零改动：
- *  - 多音源聚合与三级降级（最新单曲 → 音乐电台 → 内置曲库）、风格 / 地区 / 歌单筛选
- *  - 常驻可输入的搜索框 + 屏幕键盘（电视 / 机顶盒无需系统输入法）+ 中文热词一键输入
- *  - 曲目元数据、封面、歌词、进度 seek、循环 / 随机 / 音量、自定义音源增删
- *  - useFocusEffect 失焦停止 + 根布局 AppState 监听，退出即停止并释放 expo-av 资源
+ * 功能与数据接口零改动：多音源聚合与三级降级、常驻可输入搜索框 + 屏幕键盘、
+ * 中文热词、曲目元数据 / 封面 / 歌词 / 进度 seek / 循环 / 随机 / 音量、
+ * 自定义音源增删、useFocusEffect 失焦停止与资源释放。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,7 +21,6 @@ import {
   Modal,
   Alert,
   Image,
-  useWindowDimensions,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -46,6 +44,7 @@ import {
   RefreshCw,
   MoreHorizontal,
   Mic2,
+  Disc3,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
 import { ThemedView } from "@/components/ThemedView";
@@ -54,6 +53,7 @@ import { StyledButton } from "@/components/StyledButton";
 import { SearchKeyboard } from "@/components/SearchKeyboard";
 import { Colors } from "@/constants/Colors";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { useCompactLayout, CompactMetrics } from "@/utils/DesignTokens";
 import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
@@ -83,10 +83,13 @@ const formatTime = (ms: number) => {
 export default function MusicScreen() {
   const responsiveConfig = useResponsiveLayout();
   const commonStyles = getCommonResponsiveStyles(responsiveConfig);
-  const { deviceType, spacing } = responsiveConfig;
-  const { width: windowWidth } = useWindowDimensions();
-  const isTVLike = deviceType === "tv" || Boolean(responsiveConfig.isSetTopBox);
-  const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
+  const { spacing } = responsiveConfig;
+  const metrics = useCompactLayout();
+  const { isWide, isTVLike } = metrics;
+  const rightWidth = isWide
+    ? Math.max(240, Math.round(metrics.width - spacing * 2 - metrics.leftWidth - metrics.gap * 1.5))
+    : Math.max(240, Math.round(metrics.width - spacing * 2));
+  const gridColumns = isWide ? Math.min(3, metrics.columns) : 1;
 
   const {
     tracks,
@@ -119,19 +122,18 @@ export default function MusicScreen() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [progressWidth, setProgressWidth] = useState(0);
 
-  // 音源 / 搜索 / 筛选状态
   const [sourceMode, setSourceMode] = useState<MusicSourceId>("latest");
   const [searchText, setSearchText] = useState("");
   const [genre, setGenre] = useState<string>("全部");
   const [country, setCountry] = useState<string>("全部");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [keyboardVisible, setKeyboardVisible] = useState(isTVLike);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [discoverOpen, setDiscoverOpen] = useState(isWide);
-  // 设计稿「四工具图标」：列表 / 歌词 / 音量 / 刷新，均为真实功能开关
+  // 四工具：列表 / 歌词 / 音量 / 刷新，均为真实功能开关
   const [listVisible, setListVisible] = useState(true);
-  const [lyricsVisible, setLyricsVisible] = useState(isWide);
-  const [volumeVisible, setVolumeVisible] = useState(isWide);
+  const [lyricsVisible, setLyricsVisible] = useState(false);
+  const [volumeVisible, setVolumeVisible] = useState(false);
   const bootstrapped = useRef(false);
   const searchRef = useRef<TextInput>(null);
 
@@ -159,7 +161,6 @@ export default function MusicScreen() {
 
   const displayTracks = sourceMode === "builtin" ? libraryList : onlineList;
 
-  // 自定义音源只需加载一次
   useEffect(() => {
     void loadCustomSources();
   }, [loadCustomSources]);
@@ -294,7 +295,6 @@ export default function MusicScreen() {
     await audioPlayer.toggle();
   };
 
-  /** 搜索：内置曲库为本地即时过滤；在线音源发起检索 */
   const handleSearch = useCallback(() => {
     if (sourceMode === "builtin") {
       Toast.show({ type: "info", text1: "已在内置曲库中筛选" });
@@ -379,7 +379,6 @@ export default function MusicScreen() {
     setNewArtist("");
     setNewUrl("");
     setSourceMode("builtin");
-    // 直接用返回的 track 播放：store 刚更新，startTrack 闭包里的 tracks 还是旧快照
     setCurrentTrack(track.id);
     setAutoNext(true);
     await audioPlayer.play(track.url, track.fallbackUrls);
@@ -394,7 +393,7 @@ export default function MusicScreen() {
     ]);
   };
 
-  const dyn = useMemo(() => createStyles(deviceType, spacing), [deviceType, spacing]);
+  const dyn = useMemo(() => createStyles(metrics, spacing, rightWidth), [metrics, spacing, rightWidth]);
   const progress = playback.durationMs > 0 ? playback.positionMs / playback.durationMs : 0;
   const progressPercent = Math.min(100, Math.max(0, progress * 100));
   const stateLabel = playback.isLoading
@@ -406,32 +405,59 @@ export default function MusicScreen() {
     : "待播放";
   const sourceDescription = MUSIC_SOURCES.find((s) => s.id === sourceMode)?.description ?? "";
   const accent = currentTrack?.accent ?? Colors.brand.accent;
-  const coverSize = Math.round(
-    Math.min(isTVLike ? 300 : 260, Math.max(150, isWide ? windowWidth * 0.26 : windowWidth * 0.5))
-  );
+  const coverSize = metrics.coverSize;
 
   const renderTrack = ({ item, index }: { item: MusicTrack; index: number }) => {
     const isCurrent = item.id === currentTrackId;
     const isCustom = !item.id.startsWith("track-") && !item.id.startsWith("itunes-") &&
       !item.id.startsWith("channel-") && !item.id.startsWith("music-live-");
     const meta = [item.artist, item.genre, item.country, item.source].filter(Boolean).join(" · ");
+    const isGrid = gridColumns > 1;
+
+    const artwork = item.cover ? (
+      <Image source={{ uri: item.cover }} style={isGrid ? dyn.gridCover : dyn.trackCover} resizeMode="cover" />
+    ) : (
+      <LinearGradient colors={[item.accent, `${item.accent}55`]} style={isGrid ? dyn.gridCover : dyn.trackCover}>
+        <Music2 size={isGrid ? metrics.body + 8 : metrics.body + 2} color="#fff" />
+      </LinearGradient>
+    );
+
+    if (isGrid) {
+      return (
+        <TouchableOpacity
+          style={[
+            dyn.gridCard,
+            isCurrent && dyn.gridCardActive,
+            isTVLike && focusIndex === index && dyn.gridCardFocused,
+          ]}
+          onPress={() => void startTrack(item.id)}
+          activeOpacity={0.75}
+        >
+          {artwork}
+          <ThemedText style={[dyn.gridTitle, isCurrent && dyn.gridTitleActive]} numberOfLines={1}>
+            {item.title}
+          </ThemedText>
+          <ThemedText style={dyn.gridMeta} numberOfLines={1}>{meta || item.album || "我的音乐"}</ThemedText>
+          {isCustom && (
+            <TouchableOpacity onPress={() => handleDelete(item)} style={dyn.gridDelete} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Trash2 size={13} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      );
+    }
+
     return (
       <TouchableOpacity
         style={[
           dyn.trackRow,
           isCurrent && dyn.trackRowActive,
-          deviceType === "tv" && focusIndex === index && dyn.trackRowFocused,
+          isTVLike && focusIndex === index && dyn.trackRowFocused,
         ]}
         onPress={() => void startTrack(item.id)}
         activeOpacity={0.7}
       >
-        {item.cover ? (
-          <Image source={{ uri: item.cover }} style={dyn.trackCover} resizeMode="cover" />
-        ) : (
-          <LinearGradient colors={[item.accent, `${item.accent}55`]} style={dyn.trackCover}>
-            <Music2 size={deviceType === "tv" ? 22 : 16} color="#fff" />
-          </LinearGradient>
-        )}
+        {artwork}
         <View style={dyn.trackInfo}>
           <ThemedText style={[dyn.trackTitle, isCurrent && dyn.trackTitleActive]} numberOfLines={1}>
             {item.title}
@@ -447,7 +473,7 @@ export default function MusicScreen() {
         )}
         {isCustom && (
           <TouchableOpacity onPress={() => handleDelete(item)} style={dyn.deleteBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Trash2 size={16} color={Colors.text.tertiary} />
+            <Trash2 size={14} color={Colors.text.tertiary} />
           </TouchableOpacity>
         )}
       </TouchableOpacity>
@@ -460,15 +486,15 @@ export default function MusicScreen() {
     ? "该筛选条件下暂无曲目"
     : "暂无在线内容，试试切换音源或关键词";
 
-  // ── 设计稿页头：标题「正在播放 / ZTV MUSIC」+ 圆形「更多」「添加」 ──────
+  // ── 页头：标题「音乐在线」+ 常驻搜索框 + 圆形操作 ──────────────────────
   const pageHeader = (
     <View style={dyn.pageHeader}>
       <View style={dyn.pageTitleRow}>
         <LinearGradient colors={["#00E6A8", "#00B884"]} style={dyn.badge}>
-          <Music2 size={18} color={Colors.brand.onAccent} />
+          <Music2 size={metrics.body + 4} color={Colors.brand.onAccent} />
         </LinearGradient>
         <View style={dyn.pageTitleText}>
-          <ThemedText style={dyn.pageTitle}>正在播放</ThemedText>
+          <ThemedText style={dyn.pageTitle}>音乐在线</ThemedText>
           <ThemedText style={dyn.pageSubtitle} numberOfLines={1}>
             ZTV MUSIC · {sourceDescription}
           </ThemedText>
@@ -481,7 +507,7 @@ export default function MusicScreen() {
           accessibilityLabel={discoverOpen ? "收起发现音乐" : "展开发现音乐"}
           activeOpacity={0.75}
         >
-          <MoreHorizontal size={20} color={Colors.text.primary} />
+          <MoreHorizontal size={metrics.body + 4} color={Colors.text.primary} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[dyn.roundButton, dyn.roundButtonAccent]}
@@ -489,21 +515,21 @@ export default function MusicScreen() {
           accessibilityLabel="添加音源"
           activeOpacity={0.75}
         >
-          <Plus size={20} color={Colors.brand.onAccent} />
+          <Plus size={metrics.body + 4} color={Colors.brand.onAccent} />
         </TouchableOpacity>
       </View>
     </View>
   );
 
-  // ── 常驻搜索栏：始终可见且可输入，避免再次出现「搜索框无法输入」 ────────
+  // ── 常驻搜索栏：始终可见且可输入，避免「搜索框无法输入」回归 ────────────
   const searchRow = (
     <View style={dyn.searchRow}>
       <View style={dyn.searchBox}>
-        <Search size={16} color={Colors.text.tertiary} />
+        <Search size={metrics.body + 2} color={Colors.text.tertiary} />
         <TextInput
           ref={searchRef}
           style={dyn.searchInput}
-          placeholder="搜索歌名 / 歌手，或点下方热词"
+          placeholder="搜索歌曲 / 歌手"
           placeholderTextColor={Colors.text.disabled}
           value={searchText}
           onChangeText={setSearchText}
@@ -526,7 +552,7 @@ export default function MusicScreen() {
         text="键盘"
         variant={keyboardVisible ? "primary" : "default"}
         onPress={() => setKeyboardVisible((v) => !v)}
-        style={dyn.keyboardButton}
+        style={dyn.smallButton}
         textStyle={dyn.pillText}
       />
       <StyledButton
@@ -534,8 +560,8 @@ export default function MusicScreen() {
         variant="primary"
         onPress={handleSearch}
         disabled={loading}
-        style={dyn.searchButton}
-        textStyle={dyn.searchButtonText}
+        style={dyn.smallButton}
+        textStyle={dyn.pillText}
       />
     </View>
   );
@@ -543,8 +569,9 @@ export default function MusicScreen() {
   const keyboard = keyboardVisible ? (
     <SearchKeyboard
       visible
+      panelWidth={rightWidth}
       title="音乐搜索键盘"
-      hint="点字母 / 数字直接输入；中文歌手可点下方热词，一键发起搜索"
+      hint="点字母 / 数字直接输入；中文歌手可点热词一键搜索"
       quickTerms={MUSIC_QUICK_TERMS}
       onQuickTerm={handleQuickTerm}
       onKeyPress={(key) => setSearchText((prev) => prev + key)}
@@ -557,82 +584,26 @@ export default function MusicScreen() {
 
   const errorBanner = error ? (
     <View style={dyn.errorBanner}>
-      <RefreshCw size={13} color="#FFB86B" />
+      <RefreshCw size={12} color="#FFB86B" />
       <ThemedText style={dyn.errorBannerText} numberOfLines={2}>{error}</ThemedText>
     </View>
   ) : null;
 
-  // ── 可折叠「发现音乐」面板：音源 + 风格 / 地区 / 歌单，收起后即沉浸式 ──
-  const sourceBar = (
-    <View style={dyn.sectionLabelRow}>
-      <ThemedText style={dyn.sectionLabel}>音源</ThemedText>
-      <View style={dyn.chipRow}>
-        {MUSIC_SOURCES.map((s) => (
-          <StyledButton
-            key={s.id}
-            text={s.name}
-            isSelected={sourceMode === s.id}
-            variant="default"
-            onPress={() => switchSource(s.id)}
-            style={dyn.pill}
-            textStyle={dyn.pillText}
-          />
-        ))}
-      </View>
-    </View>
-  );
-
-  const discoverPanel = discoverOpen ? (
-    <View style={dyn.discoverPanel}>
-      {sourceBar}
-      <ThemedText style={dyn.fieldLabel}>风格</ThemedText>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
-        {MUSIC_GENRES.map((g) => (
-          <StyledButton key={g} text={g} isSelected={genre === g} variant="default"
-            onPress={() => switchFilter(g, country)} style={dyn.pill} textStyle={dyn.pillText} />
-        ))}
-      </ScrollView>
-      <View style={dyn.fieldLabelRow}>
-        <Globe size={13} color={Colors.brand.accent} />
-        <ThemedText style={dyn.fieldLabel}>地区</ThemedText>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
-        {MUSIC_COUNTRIES.map((c) => (
-          <StyledButton key={c} text={c} isSelected={country === c} variant="default"
-            onPress={() => switchFilter(genre, c)} style={dyn.pill} textStyle={dyn.pillText} />
-        ))}
-      </ScrollView>
-      {sourceMode === "builtin" && (
-        <>
-          <ThemedText style={dyn.fieldLabel}>歌单</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
-            {playlists.filter((p) => p.id !== "playlist-online").map((p) => (
-              <StyledButton key={p.id} text={`${p.name} (${p.trackIds.length})`}
-                isSelected={activePlaylistId === p.id} variant="default"
-                onPress={() => setActivePlaylist(p.id)} style={dyn.pill} textStyle={dyn.pillText} />
-            ))}
-          </ScrollView>
-        </>
-      )}
-    </View>
-  ) : null;
-
-  // ── 沉浸式「正在播放」：氛围光晕 + 大封面 + 五键 + 四工具 ──────────────
+  // ── 左栏：正在播放（紧凑） ─────────────────────────────────────────────
   const hero = (
     <LinearGradient
       colors={[`${accent}2E`, `${accent}0D`, Colors.surface.base]}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={[dyn.heroBackdrop, !isWide && dyn.heroBackdropCompact]}
+      style={dyn.heroBackdrop}
     >
-      {/* 封面光晕 */}
       <View style={[
         dyn.coverGlow,
         {
-          width: coverSize * 1.3,
-          height: coverSize * 1.3,
-          borderRadius: coverSize * 0.65,
-          marginLeft: -coverSize * 0.65,
+          width: coverSize * 1.2,
+          height: coverSize * 1.2,
+          borderRadius: coverSize * 0.6,
+          marginLeft: -coverSize * 0.6,
           backgroundColor: `${accent}26`,
         },
       ]} />
@@ -660,7 +631,7 @@ export default function MusicScreen() {
           end={{ x: 1, y: 1 }}
           style={[dyn.heroCover, { width: coverSize, height: coverSize, borderRadius: Math.round(coverSize * 0.09) }]}
         >
-          <Music2 size={Math.round(coverSize * 0.28)} color="rgba(255,255,255,0.9)" />
+          <Music2 size={Math.round(coverSize * 0.26)} color="rgba(255,255,255,0.9)" />
         </LinearGradient>
       )}
 
@@ -668,11 +639,11 @@ export default function MusicScreen() {
         <View style={dyn.nowText}>
           <ThemedText style={dyn.nowTitle} numberOfLines={1}>{currentTrack?.title ?? "选择一首曲目"}</ThemedText>
           <ThemedText style={dyn.nowArtist} numberOfLines={1}>
-            {currentTrack ? `${currentTrack.artist} · ${currentTrack.album ?? ""}` : "点击列表即可播放"}
+            {currentTrack ? `${currentTrack.artist} · ${currentTrack.album ?? ""}` : "点击右侧曲目即可播放"}
           </ThemedText>
         </View>
         <TouchableOpacity onPress={() => void handleStop()} style={dyn.stopRound} accessibilityLabel="停止播放" activeOpacity={0.75}>
-          <Square size={16} color={Colors.brand.accent} />
+          <Square size={14} color={Colors.brand.accent} />
         </TouchableOpacity>
       </View>
 
@@ -708,37 +679,37 @@ export default function MusicScreen() {
       {/* 五键控制：随机 / 上一首 / 播放 / 下一首 / 循环 */}
       <View style={dyn.controls}>
         <TouchableOpacity onPress={toggleShuffle} style={dyn.ctrlSide} accessibilityLabel="随机播放" activeOpacity={0.75}>
-          <Shuffle size={20} color={shuffle ? Colors.brand.accent : Colors.text.secondary} />
+          <Shuffle size={metrics.body + 5} color={shuffle ? Colors.brand.accent : Colors.text.secondary} />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => void handlePrev()} style={dyn.ctrlBtn} accessibilityLabel="上一首" activeOpacity={0.75}>
-          <SkipBack size={isTVLike ? 28 : 24} color="#fff" />
+          <SkipBack size={metrics.body + 8} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={dyn.playBtn} onPress={() => void handleToggle()} accessibilityLabel="播放或暂停" activeOpacity={0.8}>
           {playback.isPlaying
-            ? <Pause size={isTVLike ? 34 : 28} color={Colors.brand.onAccent} />
-            : <Play size={isTVLike ? 34 : 28} color={Colors.brand.onAccent} />}
+            ? <Pause size={metrics.body + 12} color={Colors.brand.onAccent} />
+            : <Play size={metrics.body + 12} color={Colors.brand.onAccent} />}
         </TouchableOpacity>
         <TouchableOpacity onPress={() => void handleNext()} style={dyn.ctrlBtn} accessibilityLabel="下一首" activeOpacity={0.75}>
-          <SkipForward size={isTVLike ? 28 : 24} color="#fff" />
+          <SkipForward size={metrics.body + 8} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity onPress={cycleRepeat} style={dyn.ctrlSide} accessibilityLabel="循环模式" activeOpacity={0.75}>
           {repeatMode === "one"
-            ? <Repeat1 size={20} color={Colors.brand.accent} />
-            : <Repeat size={20} color={repeatMode === "off" ? Colors.text.secondary : Colors.brand.accent} />}
+            ? <Repeat1 size={metrics.body + 5} color={Colors.brand.accent} />
+            : <Repeat size={metrics.body + 5} color={repeatMode === "off" ? Colors.text.secondary : Colors.brand.accent} />}
         </TouchableOpacity>
       </View>
 
-      {/* 四工具图标：曲目列表 / 歌词 / 音量 / 刷新音源，均为真实功能 */}
+      {/* 四工具图标：列表 / 歌词 / 音量 / 刷新，均为真实功能 */}
       <View style={dyn.toolRow}>
         {([
           { label: "列表", active: listVisible, onPress: () => setListVisible((v) => !v),
-            icon: <ListMusic size={19} color={listVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+            icon: <ListMusic size={metrics.body + 5} color={listVisible ? Colors.brand.accent : Colors.text.secondary} /> },
           { label: "歌词", active: lyricsVisible, onPress: () => setLyricsVisible((v) => !v),
-            icon: <Mic2 size={19} color={lyricsVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+            icon: <Mic2 size={metrics.body + 5} color={lyricsVisible ? Colors.brand.accent : Colors.text.secondary} /> },
           { label: "音量", active: volumeVisible, onPress: () => setVolumeVisible((v) => !v),
-            icon: <Volume2 size={19} color={volumeVisible ? Colors.brand.accent : Colors.text.secondary} /> },
+            icon: <Volume2 size={metrics.body + 5} color={volumeVisible ? Colors.brand.accent : Colors.text.secondary} /> },
           { label: "刷新", active: false, onPress: () => switchSource(sourceMode),
-            icon: <RefreshCw size={19} color={Colors.text.secondary} /> },
+            icon: <RefreshCw size={metrics.body + 5} color={Colors.text.secondary} /> },
         ] as const).map((t) => (
           <TouchableOpacity
             key={t.label}
@@ -771,7 +742,7 @@ export default function MusicScreen() {
         <View style={dyn.lyricsBox}>
           <ThemedText style={dyn.lyricsTitle}>歌词 / 说明</ThemedText>
           <ScrollView showsVerticalScrollIndicator={false}>
-            {(currentTrack?.lyrics ?? ["选择曲目后显示歌词", "—— ZTV 音乐播放"]).map((line, i) => (
+            {(currentTrack?.lyrics ?? ["选择曲目后显示歌词", "—— ZTV 音乐在线"]).map((line, i) => (
               <ThemedText key={i} style={dyn.lyricsLine}>{line}</ThemedText>
             ))}
           </ScrollView>
@@ -780,35 +751,116 @@ export default function MusicScreen() {
     </LinearGradient>
   );
 
-  const listTitle = (
-    <View style={dyn.panelHeader}>
-      <ListMusic size={16} color={Colors.brand.accent} />
-      <ThemedText style={dyn.panelTitle}>
-        {sourceMode === "builtin" ? "内置曲库" : sourceMode === "channels" ? "音乐电台" : "最新单曲"} · {displayTracks.length} 项
-      </ThemedText>
-      <ThemedText style={dyn.panelHint}>{loading ? "加载中…" : "点击播放"}</ThemedText>
+  // ── 右栏：发现音乐（音源 / 风格 / 地区 / 歌单 + 曲目网格 + 精选歌单） ──
+  const sourceBar = (
+    <View style={dyn.chipBlock}>
+      <ThemedText style={dyn.fieldLabel}>音源</ThemedText>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+        {MUSIC_SOURCES.map((s) => (
+          <StyledButton key={s.id} text={s.name} isSelected={sourceMode === s.id} variant="default"
+            onPress={() => switchSource(s.id)} style={dyn.pill} textStyle={dyn.pillText} />
+        ))}
+      </ScrollView>
     </View>
   );
 
-  const listPanel = listVisible ? (
-    <View style={[dyn.listPanel, !isWide && dyn.listPanelCompact]}>
-      {listTitle}
-      <FlatList
-        data={displayTracks}
-        renderItem={renderTrack}
-        keyExtractor={(item) => item.id}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={dyn.listContent}
-        ListEmptyComponent={<ThemedText style={dyn.emptyText}>{emptyText}</ThemedText>}
-      />
+  const discoverPanel = discoverOpen ? (
+    <View style={dyn.discoverPanel}>
+      {sourceBar}
+      <ThemedText style={dyn.fieldLabel}>风格</ThemedText>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+        {MUSIC_GENRES.map((g) => (
+          <StyledButton key={g} text={g} isSelected={genre === g} variant="default"
+            onPress={() => switchFilter(g, country)} style={dyn.pill} textStyle={dyn.pillText} />
+        ))}
+      </ScrollView>
+      <View style={dyn.fieldLabelRow}>
+        <Globe size={12} color={Colors.brand.accent} />
+        <ThemedText style={dyn.fieldLabel}>地区</ThemedText>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+        {MUSIC_COUNTRIES.map((c) => (
+          <StyledButton key={c} text={c} isSelected={country === c} variant="default"
+            onPress={() => switchFilter(genre, c)} style={dyn.pill} textStyle={dyn.pillText} />
+        ))}
+      </ScrollView>
+      {sourceMode === "builtin" && (
+        <>
+          <ThemedText style={dyn.fieldLabel}>歌单</ThemedText>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.filterBar}>
+            {playlists.filter((p) => p.id !== "playlist-online").map((p) => (
+              <StyledButton key={p.id} text={`${p.name} (${p.trackIds.length})`}
+                isSelected={activePlaylistId === p.id} variant="default"
+                onPress={() => setActivePlaylist(p.id)} style={dyn.pill} textStyle={dyn.pillText} />
+            ))}
+          </ScrollView>
+        </>
+      )}
     </View>
   ) : null;
 
-  // 宽屏：沉浸式播放器为主栏，曲目列表退到次栏；窄屏：播放器置顶、列表在下
-  const body = (
-    <View style={isWide ? dyn.bodyWide : dyn.bodyNarrow}>
-      {hero}
-      {listPanel}
+  const listTitle = (
+    <View style={dyn.panelHeader}>
+      <ThemedText style={dyn.panelTitle}>发现音乐</ThemedText>
+      <ThemedText style={dyn.panelHint}>
+        {sourceMode === "builtin" ? "内置曲库" : sourceMode === "channels" ? "音乐电台" : "最新单曲"} · {displayTracks.length} 项
+      </ThemedText>
+      <ThemedText style={dyn.panelHint}>{loading ? "加载中…" : "每日推荐 · 点击即播"}</ThemedText>
+    </View>
+  );
+
+  const trackGrid = (
+    <FlatList
+      data={displayTracks}
+      renderItem={renderTrack}
+      keyExtractor={(item) => item.id}
+      numColumns={gridColumns}
+      columnWrapperStyle={gridColumns > 1 ? dyn.gridRow : undefined}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={dyn.listContent}
+      ListEmptyComponent={<ThemedText style={dyn.emptyText}>{emptyText}</ThemedText>}
+    />
+  );
+
+  /** 设计稿「为你推荐 · 精选歌单」：真实歌单，点击即切到内置曲库并选中该歌单 */
+  const playlistCards = (
+    <View style={dyn.playlistSection}>
+      <View style={dyn.playlistHeader}>
+        <Disc3 size={metrics.body + 2} color={Colors.brand.accent} />
+        <ThemedText style={dyn.playlistTitle}>为你推荐 · 精选歌单</ThemedText>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        {playlists.filter((p) => p.id !== "playlist-online").slice(0, 4).map((p) => (
+          <TouchableOpacity
+            key={p.id}
+            style={[dyn.playlistCard, activePlaylistId === p.id && dyn.playlistCardActive]}
+            onPress={() => {
+              setSourceMode("builtin");
+              setActivePlaylist(p.id);
+              setListVisible(true);
+              void loadSource("builtin", "", genre, country, true);
+            }}
+            activeOpacity={0.75}
+          >
+            <LinearGradient colors={[`${p.accent}AA`, `${p.accent}33`]} style={dyn.playlistCover}>
+              <ListMusic size={metrics.body + 6} color="#fff" />
+            </LinearGradient>
+            <ThemedText style={dyn.playlistName} numberOfLines={1}>{p.name}</ThemedText>
+            <ThemedText style={dyn.playlistDesc} numberOfLines={1}>{p.trackIds.length} 首 · {p.description}</ThemedText>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+
+  const rightColumn = (
+    <View style={[dyn.rightColumn, isWide && dyn.rightColumnWide]}>
+      {keyboard}
+      {errorBanner}
+      {discoverPanel}
+      {listTitle}
+      {listVisible ? trackGrid : null}
+      {playlistCards}
     </View>
   );
 
@@ -820,7 +872,7 @@ export default function MusicScreen() {
           <View style={dyn.modalHeader}>
             <ThemedText style={dyn.modalTitle}>添加在线音源</ThemedText>
             <TouchableOpacity onPress={() => setAddModalVisible(false)}>
-              <X size={20} color={Colors.text.secondary} />
+              <X size={18} color={Colors.text.secondary} />
             </TouchableOpacity>
           </View>
           <ThemedText style={dyn.modalHint}>填入可直连的 mp3 / m4a / m3u8 音频地址</ThemedText>
@@ -847,228 +899,250 @@ export default function MusicScreen() {
     <ThemedView style={[commonStyles.container, dyn.container]}>
       {pageHeader}
       {searchRow}
-      {keyboard}
-      {errorBanner}
-      {discoverPanel}
-      {body}
+      <View style={[dyn.columns, isWide && dyn.columnsWide]}>
+        <View style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}>{hero}</View>
+        {rightColumn}
+      </View>
       {modal}
     </ThemedView>
   );
 
-  if (deviceType === "tv") return content;
+  if (metrics.deviceType === "tv") return content;
   return (
     <ResponsiveNavigation>
-      <ResponsiveHeader title="音乐播放" showBackButton />
+      <ResponsiveHeader title="音乐在线" showBackButton />
       {content}
     </ResponsiveNavigation>
   );
 }
 
-const createStyles = (deviceType: string, spacing: number) => {
-  const isTV = deviceType === "tv";
-  const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
-  return StyleSheet.create({
-    container: { flex: 1, paddingTop: isTV ? 40 : 0, paddingHorizontal: spacing, paddingBottom: spacing },
-
-    /* 设计稿页头 */
+const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
+  StyleSheet.create({
+    container: {
+      flex: 1, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
+      paddingHorizontal: spacing, paddingBottom: spacing / 2,
+    },
     pageHeader: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      marginBottom: spacing, marginTop: isTV ? spacing : spacing / 2, gap: 8,
+      marginBottom: m.gapSm, marginTop: m.isTVLike ? m.gap : m.gap / 2, gap: 8,
     },
-    pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+    pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
     pageTitleText: { flexShrink: 1 },
     badge: {
-      width: isTV ? 44 : 36, height: isTV ? 44 : 36, borderRadius: 12,
+      width: m.headerHeight - 4, height: m.headerHeight - 4, borderRadius: m.radiusSm - 2,
       alignItems: "center", justifyContent: "center",
     },
-    pageTitle: { fontSize: isTV ? 28 : 20, fontWeight: "bold" },
-    pageSubtitle: { fontSize: 11, color: Colors.text.tertiary, marginTop: 2 },
-    headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+    pageTitle: { fontSize: m.pageTitle, fontWeight: "bold" },
+    pageSubtitle: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
+    headerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
     roundButton: {
-      width: isTV ? 44 : 38, height: isTV ? 44 : 38, borderRadius: isTV ? 22 : 19,
+      width: m.headerHeight - 4, height: m.headerHeight - 4, borderRadius: (m.headerHeight - 4) / 2,
       alignItems: "center", justifyContent: "center",
       backgroundColor: Colors.surface.overlay, borderWidth: 1, borderColor: Colors.surface.border,
     },
     roundButtonAccent: { backgroundColor: Colors.brand.accent, borderColor: Colors.brand.accent },
 
     /* 常驻搜索栏 */
-    searchRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: spacing },
+    searchRow: { flexDirection: "row", alignItems: "center", gap: m.gapSm, marginBottom: m.gap },
     searchBox: {
-      flex: 1, minWidth: 120, flexDirection: "row", alignItems: "center", gap: 8,
+      flex: 1, minWidth: 110, flexDirection: "row", alignItems: "center", gap: 6,
       backgroundColor: Colors.surface.overlay, borderWidth: 1, borderColor: Colors.surface.border,
-      borderRadius: 20, paddingHorizontal: 12, height: isTV ? 48 : 42,
+      borderRadius: 18, paddingHorizontal: 10, height: m.headerHeight - 4,
     },
-    searchInput: {
-      flex: 1, height: "100%", minHeight: 36, color: Colors.text.primary,
-      fontSize: 14, paddingVertical: 0,
-    },
-    searchClear: { padding: 4 },
-    keyboardButton: { borderRadius: 20, paddingHorizontal: 12, height: isTV ? 48 : 42, justifyContent: "center" },
-    searchButton: { borderRadius: 20, paddingHorizontal: 14, height: isTV ? 48 : 42, justifyContent: "center" },
-    searchButtonText: { fontSize: 13 },
+    searchInput: { flex: 1, height: "100%", minHeight: 32, color: Colors.text.primary, fontSize: m.body, paddingVertical: 0 },
+    searchClear: { padding: 3 },
+    smallButton: { borderRadius: 18, paddingHorizontal: 12, height: m.headerHeight - 4, justifyContent: "center" },
 
-    /* 可折叠发现面板 */
-    discoverPanel: {
-      borderRadius: 16, borderWidth: 1, borderColor: Colors.surface.border,
-      backgroundColor: Colors.surface.raised, padding: 12, marginBottom: spacing,
-    },
-    sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" },
-    sectionLabel: { fontSize: 12, fontWeight: "600", color: Colors.text.tertiary },
-    chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-    fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-    fieldLabel: { fontSize: 11, color: Colors.text.tertiary, marginBottom: 6 },
-    filterBar: { marginBottom: 10, flexGrow: 0 },
-    pill: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
-    pillText: { fontSize: 12 },
-    errorBanner: {
-      flexDirection: "row", alignItems: "center", gap: 8, padding: 10, marginBottom: spacing,
-      borderRadius: 10, backgroundColor: "rgba(255,184,107,0.10)",
-      borderWidth: 1, borderColor: "rgba(255,184,107,0.28)",
-    },
-    errorBannerText: { flex: 1, color: "#FFB86B", fontSize: 12 },
+    /* 分栏 */
+    columns: { flex: 1, flexDirection: "column", minHeight: 0 },
+    columnsWide: { flexDirection: "row", gap: m.gap * 1.5 },
+    leftColumn: { flexShrink: 0 },
+    leftColumnWide: { width: m.leftWidth, flexShrink: 0 },
+    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, marginTop: m.gap },
+    rightColumnWide: { flex: 1, marginTop: 0 },
 
-    /* 主体：播放器为主角 */
-    bodyWide: { flex: 1, flexDirection: "row", gap: spacing, minHeight: 0 },
-    bodyNarrow: { flex: 1, flexDirection: "column", gap: spacing, minHeight: 0 },
+    /* 正在播放卡 */
     heroBackdrop: {
-      flex: 1.45, minWidth: 0, borderRadius: 24, padding: isTV ? 24 : 18,
-      alignItems: "center", overflow: "hidden", position: "relative",
+      borderRadius: m.radius, padding: m.cardPadding, alignItems: "center",
+      overflow: "hidden", position: "relative",
       borderWidth: 1, borderColor: Colors.surface.border,
     },
-    heroBackdropCompact: { flex: 0 },
-    coverGlow: { position: "absolute", top: 10, left: "50%" },
+    coverGlow: { position: "absolute", top: 8, left: "50%" },
     heroTopRow: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
       width: "100%", gap: 8, zIndex: 1,
     },
     stateBadge: {
-      flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5,
-      borderRadius: 12, backgroundColor: "rgba(0,0,0,0.28)",
+      flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4,
+      borderRadius: 10, backgroundColor: "rgba(0,0,0,0.28)",
     },
-    stateDot: { width: 7, height: 7, borderRadius: 4 },
-    stateText: { fontSize: 11, fontWeight: "600", color: "#fff" },
-    heroSource: { fontSize: 10, color: "rgba(255,255,255,0.72)", flexShrink: 1, textAlign: "right" },
+    stateDot: { width: 6, height: 6, borderRadius: 3 },
+    stateText: { fontSize: m.caption, fontWeight: "600", color: "#fff" },
+    heroSource: { fontSize: m.caption, color: "rgba(255,255,255,0.72)", flexShrink: 1, textAlign: "right" },
     heroCover: {
       alignItems: "center", justifyContent: "center", overflow: "hidden",
-      marginTop: isTV ? 18 : 14, marginBottom: isTV ? 16 : 12, zIndex: 1,
+      marginTop: m.gap, marginBottom: m.gap, zIndex: 1,
     },
-    nowRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 10, zIndex: 1 },
+    nowRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 8, zIndex: 1 },
     nowText: { flex: 1, minWidth: 0 },
-    nowTitle: { fontSize: isTV ? 28 : isWide ? 22 : 19, fontWeight: "bold", color: "#fff" },
-    nowArtist: { fontSize: 11, color: Colors.text.secondary, marginTop: 4 },
+    nowTitle: { fontSize: m.sectionTitle + 2, fontWeight: "bold", color: "#fff" },
+    nowArtist: { fontSize: m.caption, color: Colors.text.secondary, marginTop: 3 },
     stopRound: {
-      width: isTV ? 42 : 36, height: isTV ? 42 : 36, borderRadius: isTV ? 21 : 18,
+      width: m.roundControl - 6, height: m.roundControl - 6, borderRadius: (m.roundControl - 6) / 2,
       alignItems: "center", justifyContent: "center",
       backgroundColor: "rgba(0,0,0,0.28)", borderWidth: 1, borderColor: "rgba(255,255,255,0.35)",
     },
-
-    /* 进度条 */
-    liveRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing, zIndex: 1 },
-    liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.brand.live },
-    liveRowText: { fontSize: 11, color: Colors.text.secondary },
+    liveRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: m.gap, zIndex: 1 },
+    liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.brand.live },
+    liveRowText: { fontSize: m.caption, color: Colors.text.secondary },
     progressTrack: {
-      flexDirection: "row", width: "100%", height: 6, borderRadius: 3,
-      backgroundColor: Colors.surface.overlay, marginTop: isTV ? 18 : 14, zIndex: 1,
+      flexDirection: "row", width: "100%", height: 5, borderRadius: 3,
+      backgroundColor: Colors.surface.overlay, marginTop: m.gap, zIndex: 1,
     },
     progressFill: { height: "100%", backgroundColor: Colors.brand.accent, borderRadius: 3 },
     progressKnob: {
-      position: "absolute", top: -2, width: 10, height: 10, marginLeft: -5,
+      position: "absolute", top: -2, width: 9, height: 9, marginLeft: -4,
       borderRadius: 5, backgroundColor: "#fff",
     },
-    timeRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 6, zIndex: 1 },
-    timeText: { fontSize: 11, color: Colors.text.tertiary },
-
-    /* 五键控制 + 四工具 */
+    timeRow: { flexDirection: "row", justifyContent: "space-between", width: "100%", marginTop: 5, zIndex: 1 },
+    timeText: { fontSize: m.caption, color: Colors.text.tertiary },
     controls: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      width: "100%", maxWidth: 420, marginTop: isTV ? 18 : 14, zIndex: 1,
+      width: "100%", maxWidth: 360, marginTop: m.gap, zIndex: 1,
     },
-    ctrlSide: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-    ctrlBtn: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
+    ctrlSide: { width: m.roundControl - 6, height: m.roundControl - 6, borderRadius: (m.roundControl - 6) / 2, alignItems: "center", justifyContent: "center" },
+    ctrlBtn: { width: m.roundControl, height: m.roundControl, borderRadius: m.roundControl / 2, alignItems: "center", justifyContent: "center" },
     playBtn: {
-      width: isTV ? 72 : 60, height: isTV ? 72 : 60, borderRadius: isTV ? 36 : 30,
+      width: m.playButton, height: m.playButton, borderRadius: m.playButton / 2,
       backgroundColor: Colors.brand.accent, alignItems: "center", justifyContent: "center",
-      shadowColor: Colors.brand.accent, shadowOpacity: 0.4, shadowRadius: 12, shadowOffset: { width: 0, height: 0 },
+      shadowColor: Colors.brand.accent, shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 0 },
     },
     toolRow: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      width: "100%", maxWidth: 420, marginTop: isTV ? 18 : 14, zIndex: 1, gap: 8,
+      width: "100%", maxWidth: 360, marginTop: m.gap, zIndex: 1, gap: 6,
     },
     toolButton: {
-      flex: 1, alignItems: "center", justifyContent: "center", gap: 3,
-      minHeight: isTV ? 58 : 50, borderRadius: 16,
+      flex: 1, alignItems: "center", justifyContent: "center", gap: 2,
+      minHeight: m.roundControl, borderRadius: m.radiusSm,
       backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: Colors.surface.border,
     },
     toolButtonActive: { backgroundColor: "rgba(0,230,168,0.12)", borderColor: "rgba(0,230,168,0.45)" },
-    toolLabel: { fontSize: 10, color: Colors.text.tertiary },
+    toolLabel: { fontSize: m.caption, color: Colors.text.tertiary },
     toolLabelActive: { color: Colors.brand.accent },
     volumeRow: {
-      flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10,
+      flexDirection: "row", alignItems: "center", gap: 5, marginTop: m.gapSm,
       flexWrap: "wrap", justifyContent: "center", zIndex: 1,
     },
-    volumeChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: Colors.surface.overlay },
+    volumeChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: Colors.surface.overlay },
     volumeChipActive: { backgroundColor: "rgba(0,230,168,0.2)", borderWidth: 1, borderColor: Colors.brand.accent },
-    volumeText: { fontSize: 11 },
-    errorText: { color: "#ff6b6b", fontSize: 12, marginTop: 8, textAlign: "center", zIndex: 1 },
+    volumeText: { fontSize: m.caption },
+    errorText: { color: "#ff6b6b", fontSize: m.caption + 1, marginTop: 6, textAlign: "center", zIndex: 1 },
     lyricsBox: {
-      width: "100%", marginTop: spacing, paddingTop: spacing,
-      borderTopWidth: 1, borderTopColor: Colors.surface.border, maxHeight: isTV ? 140 : 90, zIndex: 1,
+      width: "100%", marginTop: m.gap, paddingTop: m.gapSm,
+      borderTopWidth: 1, borderTopColor: Colors.surface.border, maxHeight: 76, zIndex: 1,
     },
-    lyricsTitle: { fontSize: 12, fontWeight: "600", marginBottom: 6, color: Colors.brand.accent },
-    lyricsLine: { fontSize: 12, color: Colors.text.secondary, textAlign: "center", lineHeight: 20 },
+    lyricsTitle: { fontSize: m.caption + 1, fontWeight: "600", marginBottom: 4, color: Colors.brand.accent },
+    lyricsLine: { fontSize: m.caption + 1, color: Colors.text.secondary, textAlign: "center", lineHeight: 18 },
 
-    /* 曲目列表（次栏） */
-    listPanel: {
-      flex: 1, minWidth: 0, backgroundColor: Colors.surface.raised, borderRadius: 20,
-      borderWidth: 1, borderColor: Colors.surface.border, padding: spacing,
+    /* 发现音乐 */
+    discoverPanel: {
+      borderRadius: m.radiusSm, borderWidth: 1, borderColor: Colors.surface.border,
+      backgroundColor: Colors.surface.raised, padding: m.gapSm + 2, marginBottom: m.gapSm,
     },
-    listPanelCompact: { flex: 1, minHeight: 180 },
-    listContent: { paddingBottom: spacing },
-    panelHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-    panelTitle: { fontSize: 14, fontWeight: "600", flex: 1 },
-    panelHint: { fontSize: 11, color: Colors.text.tertiary },
+    chipBlock: { marginBottom: m.gapSm },
+    fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+    fieldLabel: { fontSize: m.caption, color: Colors.text.tertiary, marginBottom: 5 },
+    filterBar: { marginBottom: m.gapSm, flexGrow: 0 },
+    pill: { borderRadius: 16, paddingHorizontal: 11, paddingVertical: 5, marginRight: 6 },
+    pillText: { fontSize: m.caption + 1 },
+    errorBanner: {
+      flexDirection: "row", alignItems: "center", gap: 6, padding: 8, marginBottom: m.gapSm,
+      borderRadius: m.radiusSm - 2, backgroundColor: "rgba(255,184,107,0.10)",
+      borderWidth: 1, borderColor: "rgba(255,184,107,0.28)",
+    },
+    errorBannerText: { flex: 1, color: "#FFB86B", fontSize: m.caption + 1 },
+    panelHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: m.gapSm },
+    panelTitle: { fontSize: m.sectionTitle, fontWeight: "700" },
+    panelHint: { fontSize: m.caption, color: Colors.text.tertiary, marginLeft: "auto" },
+    listContent: { paddingBottom: m.gapSm },
+
+    /* 曲目网格（宽屏）/ 行列表（手机） */
+    gridRow: { gap: m.gapSm },
+    gridCard: {
+      flex: 1, maxWidth: `${100 / Math.max(1, Math.min(3, m.columns)) - 2}%`,
+      borderRadius: m.radiusSm, borderWidth: 1, borderColor: Colors.surface.border,
+      backgroundColor: Colors.surface.raised, padding: m.gapSm, marginBottom: m.gapSm,
+      position: "relative",
+    },
+    gridCardActive: { borderColor: Colors.brand.accent, backgroundColor: "rgba(0,230,168,0.10)" },
+    gridCardFocused: { borderWidth: 2, borderColor: Colors.brand.accent },
+    gridCover: {
+      width: "100%", aspectRatio: 1, borderRadius: m.radiusSm - 3,
+      alignItems: "center", justifyContent: "center", overflow: "hidden", marginBottom: 6,
+    },
+    gridTitle: { fontSize: m.body, fontWeight: "600" },
+    gridTitleActive: { color: Colors.brand.accent },
+    gridMeta: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
+    gridDelete: { position: "absolute", top: m.gapSm + 2, right: m.gapSm + 2, padding: 3 },
     trackRow: {
-      flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 8,
-      borderRadius: 10, marginBottom: 4, minHeight: 52,
+      flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 7,
+      borderRadius: m.radiusSm - 2, marginBottom: 3, minHeight: 44,
     },
     trackRowActive: { backgroundColor: "rgba(0,230,168,0.12)" },
     trackRowFocused: { borderWidth: 2, borderColor: Colors.brand.accent },
     trackCover: {
-      width: isTV ? 46 : 36, height: isTV ? 46 : 36, borderRadius: 8,
+      width: m.roundControl - 4, height: m.roundControl - 4, borderRadius: 7,
       alignItems: "center", justifyContent: "center", overflow: "hidden",
     },
-    trackInfo: { flex: 1, marginLeft: 12, minWidth: 0 },
-    trackTitle: { fontSize: isTV ? 18 : 14, fontWeight: "600" },
+    trackInfo: { flex: 1, marginLeft: m.gapSm + 2, minWidth: 0 },
+    trackTitle: { fontSize: m.body, fontWeight: "600" },
     trackTitleActive: { color: Colors.brand.accent },
-    trackArtist: { fontSize: 11, color: Colors.text.tertiary, marginTop: 2 },
-    trackDuration: { fontSize: 11, color: Colors.text.tertiary },
-    liveChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: "rgba(255,59,71,0.15)" },
-    liveChipText: { fontSize: 10, fontWeight: "700", color: Colors.brand.live },
-    deleteBtn: { marginLeft: 8, padding: 4 },
-    emptyText: { fontSize: 13, color: Colors.text.tertiary, textAlign: "center", padding: 20 },
+    trackArtist: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 1 },
+    trackDuration: { fontSize: m.caption, color: Colors.text.tertiary },
+    liveChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 7, backgroundColor: "rgba(255,59,71,0.15)" },
+    liveChipText: { fontSize: m.caption, fontWeight: "700", color: Colors.brand.live },
+    deleteBtn: { marginLeft: 6, padding: 3 },
+    emptyText: { fontSize: m.body, color: Colors.text.tertiary, textAlign: "center", padding: 16 },
+
+    /* 精选歌单 */
+    playlistSection: { marginTop: m.gapSm },
+    playlistHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: m.gapSm },
+    playlistTitle: { fontSize: m.body + 1, fontWeight: "700" },
+    playlistCard: {
+      width: Math.max(96, Math.min(150, rightWidth / 3.4)), marginRight: m.gapSm,
+      padding: m.gapSm - 1, borderRadius: m.radiusSm,
+      backgroundColor: Colors.surface.raised, borderWidth: 1, borderColor: Colors.surface.border,
+    },
+    playlistCardActive: { borderColor: Colors.brand.accent },
+    playlistCover: {
+      width: "100%", aspectRatio: 1.25, borderRadius: m.radiusSm - 3,
+      alignItems: "center", justifyContent: "center", marginBottom: 5,
+    },
+    playlistName: { fontSize: m.body, fontWeight: "600" },
+    playlistDesc: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
 
     /* 添加音源弹窗 */
-    modalOverlay: { flex: 1, backgroundColor: Colors.surface.scrim, alignItems: "center", justifyContent: "center", padding: 24 },
+    modalOverlay: { flex: 1, backgroundColor: Colors.surface.scrim, alignItems: "center", justifyContent: "center", padding: 20 },
     modalCard: {
-      width: "100%", maxWidth: 520, backgroundColor: Colors.surface.raised, borderRadius: 16,
-      borderWidth: 1, borderColor: Colors.surface.border, padding: 20,
+      width: "100%", maxWidth: 480, backgroundColor: Colors.surface.raised, borderRadius: m.radius,
+      borderWidth: 1, borderColor: Colors.surface.border, padding: 18,
     },
     modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-    modalTitle: { fontSize: 18, fontWeight: "bold" },
-    modalHint: { fontSize: 12, color: Colors.text.tertiary, marginTop: 6, marginBottom: 14 },
+    modalTitle: { fontSize: m.sectionTitle + 1, fontWeight: "bold" },
+    modalHint: { fontSize: m.caption + 1, color: Colors.text.tertiary, marginTop: 5, marginBottom: 12 },
     modalInput: {
-      height: 46, borderWidth: 1, borderColor: Colors.surface.border, borderRadius: 10,
-      paddingHorizontal: 12, fontSize: 14, backgroundColor: Colors.surface.overlay,
-      color: "#fff", marginBottom: 10,
+      height: 42, borderWidth: 1, borderColor: Colors.surface.border, borderRadius: m.radiusSm - 2,
+      paddingHorizontal: 10, fontSize: m.body, backgroundColor: Colors.surface.overlay,
+      color: "#fff", marginBottom: 8,
     },
     urlPrefixRow: { flexDirection: "row", alignItems: "center" },
     urlPrefix: {
-      fontSize: 14, color: Colors.brand.accent, fontWeight: "600", backgroundColor: Colors.surface.overlay,
+      fontSize: m.body, color: Colors.brand.accent, fontWeight: "600", backgroundColor: Colors.surface.overlay,
       borderLeftWidth: 1, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.surface.border,
-      borderTopLeftRadius: 10, borderBottomLeftRadius: 10, paddingHorizontal: 10, height: 46, textAlignVertical: "center",
+      borderTopLeftRadius: m.radiusSm - 2, borderBottomLeftRadius: m.radiusSm - 2,
+      paddingHorizontal: 8, height: 42, textAlignVertical: "center",
     },
     urlInput: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 },
-    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 6 },
-    modalBtn: { borderRadius: 20, paddingHorizontal: 18 },
+    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4 },
+    modalBtn: { borderRadius: 18, paddingHorizontal: 16 },
   });
-};

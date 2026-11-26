@@ -1,7 +1,7 @@
 /**
  * 统一音频播放服务（基于项目已有的 expo-av）。
  *
- * 供「音乐播放」与「收音机」共用，避免两个页面各自维护一套 Sound 实例。
+ * 供「音乐在线」与「收音机」共用，避免两个页面各自维护一套 Sound 实例。
  *
  * 参考成熟开源项目的播放生命周期做法：
  * - react-native-track-player：stopWithApp / StopPlaybackAndRemoveNotification，

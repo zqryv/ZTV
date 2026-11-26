@@ -78,14 +78,14 @@ async function probe(url, timeoutMs = 12000) {
   }
 
   try {
-    const cn = await service.searchLatestMusic("周杰伦", "中国", 8);
-    check("中国区中文搜索地区回退", cn.length > 0, `${cn.length} 首，首条 ${cn[0]?.title || "-"}`);
+    const cn = await service.searchLatestMusic("周杰伦", "中国大陆", 8);
+    check("中国大陆中文搜索地区回退", cn.length > 0, `${cn.length} 首，首条 ${cn[0]?.title || "-"}`);
   } catch (e) {
     check("中国区中文搜索地区回退", false, e.message);
   }
 
   try {
-    const channels = await service.fetchMusicChannels("中国", "全部", 8);
+    const channels = await service.fetchMusicChannels("中国大陆", "全部", 8);
     check("音乐电台兜底音源", channels.length > 0, `${channels.length} 个，首条 ${channels[0]?.title || "-"}`);
     check("音乐电台标记为直播流", channels.every((t) => t.isLive === true && HTTPS(t.url)));
   } catch (e) {
@@ -109,14 +109,15 @@ async function probe(url, timeoutMs = 12000) {
   check("内置电台均为 https", library.BUILTIN_RADIO_STATIONS.every((s) => HTTPS(s.url) &&
     (!s.fallbackUrls || s.fallbackUrls.every(HTTPS))));
 
+  const REGIONS = ["中国大陆", "中国台湾", "美国", "日本", "韩国", "欧洲"];
   const regions = new Set(library.BUILTIN_RADIO_STATIONS.map((s) => s.country));
-  check("内置电台覆盖四地区", ["中国", "欧美", "日本", "韩国"].every((r) => regions.has(r)), [...regions].join("/"));
+  check("内置电台覆盖六地区", REGIONS.every((r) => regions.has(r)), [...regions].join("/"));
   check("内置电台数量 >= 20", library.BUILTIN_RADIO_STATIONS.length >= 20, `${library.BUILTIN_RADIO_STATIONS.length} 个`);
   check("内置音乐含 24h 直播源", library.BUILTIN_TRACKS.some((t) => t.isLive),
     `${library.BUILTIN_TRACKS.filter((t) => t.isLive).length} 条`);
 
   // 抽样探测：每个地区取一个代表，确认内置电台不是「看起来可用」
-  const samples = ["中国", "欧美", "日本", "韩国"].map((region) =>
+  const samples = REGIONS.map((region) =>
     library.BUILTIN_RADIO_STATIONS.find((s) => s.country === region)
   ).filter(Boolean);
   const probes = await Promise.all(samples.map((s) => probe(s.url)));

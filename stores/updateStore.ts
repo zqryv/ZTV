@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import updateService from "../services/updateService";
-import { UpdateTarget } from "../constants/UpdateConfig";
+import { UPDATE_CONFIG, UpdateTarget } from "../constants/UpdateConfig";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
@@ -27,6 +27,8 @@ interface UpdateState {
   skipVersion: string | null;
   showUpdateModal: boolean;
   isLatestVersion: boolean;
+  /** AsyncStorage 中的上次检查时间是否已读入，避免启动时用 0 触发一次无效检查 */
+  initialized: boolean;
 
   // 操作
   checkForUpdate: (silent?: boolean) => Promise<void>;
@@ -62,6 +64,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   skipVersion: null,
   showUpdateModal: false,
   isLatestVersion: false,
+  initialized: false,
 
   checkForUpdate: async (silent = false) => {
     if (get().checking) return;
@@ -69,7 +72,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
 
     try {
       const skipVersion = await AsyncStorage.getItem(STORAGE_KEYS.SKIP_VERSION);
-      const info = await updateService.checkVersion();
+      // 自动静默检查复用 5 分钟缓存；用户手动点「检查更新」强制走网络
+      const info = await updateService.checkVersion(!silent);
       const updateAvailable = updateService.isUpdateAvailable(info.version);
       const now = Date.now();
 
@@ -122,7 +126,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
   },
 
   startDownload: async () => {
-    const { downloadUrl, releasePageUrl, inAppInstall, assetName, remoteVersion } = get();
+    const { downloadUrl, releasePageUrl, inAppInstall, assetName, remoteVersion, target } = get();
 
     // 不支持应用内安装的平台（iOS / macOS / Windows / 鸿蒙 NEXT）直接打开浏览器
     if (!inAppInstall) {
@@ -139,9 +143,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       set({ downloading: true, downloadProgress: 0, error: null });
       const fileName = assetName || `ZTV-v${remoteVersion}.apk`;
-      const path = await updateService.downloadRelease(downloadUrl, fileName, (progress) => {
-        set({ downloadProgress: progress });
-      });
+      const path = await updateService.downloadRelease(
+        downloadUrl,
+        fileName,
+        (progress) => {
+          set({ downloadProgress: progress });
+        },
+        UPDATE_CONFIG.getDownloadCandidates(remoteVersion, target),
+      );
       set({ downloadedPath: path, downloading: false, downloadProgress: 100 });
     } catch (error) {
       const message = error instanceof Error ? error.message : "下载失败";
@@ -211,8 +220,11 @@ export const initUpdateStore = async () => {
     useUpdateStore.setState({
       lastCheckTime: lastCheckTime ? parseInt(lastCheckTime, 10) : 0,
       skipVersion: skipVersion || null,
+      initialized: true,
     });
   } catch (error) {
     logger.error("初始化更新存储失败:", error);
+    // 即使读取失败也要放行自动检查，避免用户永远看不到更新
+    useUpdateStore.setState({ initialized: true });
   }
 };

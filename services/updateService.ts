@@ -1,5 +1,5 @@
 // services/updateService.ts
-// 更新服务：GitHub Releases API 优先 + 多镜像回退 + 按设备形态选择安装包
+// 更新服务（v2.3.0）：并发竞速检查 + 结果缓存 + 多源下载 / 停滞检测 / 断点续传
 import * as FileSystem from "expo-file-system";
 import * as IntentLauncher from "expo-intent-launcher";
 import { Linking, Platform } from "react-native";
@@ -40,6 +40,35 @@ interface GithubRelease {
   assets: GithubReleaseAsset[];
 }
 
+/** 只取第一个成功的 Promise；全部失败时给出汇总错误（不依赖 Promise.any，兼容 Hermes） */
+const firstFulfilled = <T>(promises: Array<Promise<T>>): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    if (promises.length === 0) {
+      reject(new Error("没有可用的版本检查源"));
+      return;
+    }
+    let remaining = promises.length;
+    const failures: string[] = [];
+    promises.forEach((promise) => {
+      promise.then(
+        (value) => resolve(value),
+        (error) => {
+          failures.push(error instanceof Error ? error.message : String(error));
+          remaining -= 1;
+          if (remaining === 0) reject(new Error(`所有版本源均不可用（${failures.join("；")}）`));
+        },
+      );
+    });
+  });
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** 给竞速中「未被采用」的请求挂一个静默 catch，避免取消时产生未处理的 rejection */
+const swallowRejection = <T>(promise: Promise<T>): Promise<T> => {
+  void promise.catch(() => undefined);
+  return promise;
+};
+
 class UpdateService {
   private static instance: UpdateService;
   static getInstance(): UpdateService {
@@ -47,14 +76,28 @@ class UpdateService {
     return UpdateService.instance;
   }
 
-  /** 统一带超时的 JSON 请求，避免某个镜像卡死导致整个检查流程不可用 */
+  /** 最近一次成功的检查结果（内存缓存，避免重复请求拖慢启动） */
+  private cached: { info: VersionInfo; at: number } | null = null;
+  /** 并发去重：同一时刻只发起一轮检查 */
+  private inFlight: Promise<VersionInfo> | null = null;
+  /** 下载中断时保留的续传数据（iOS 提供；Android 拿不到时自动改为换源重下） */
+  private resumeData: string | null = null;
+
+  /** 统一带超时的 JSON 请求，支持外部取消（首个源成功后终止其余请求） */
   private async fetchJson<T>(
     url: string,
     timeoutMs: number,
     headers: Record<string, string> = {},
+    externalSignal?: AbortSignal,
   ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onAbort = () => controller.abort();
+    try {
+      externalSignal?.addEventListener?.("abort", onAbort, { once: true } as any);
+    } catch {
+      // 个别运行时的 AbortSignal 不支持 addEventListener，忽略即可（仍有超时保护）
+    }
     try {
       const response = await fetch(url, {
         signal: controller.signal,
@@ -69,14 +112,18 @@ class UpdateService {
       return (await response.json()) as T;
     } finally {
       clearTimeout(timer);
+      try {
+        externalSignal?.removeEventListener?.("abort", onAbort);
+      } catch {
+        // ignore
+      }
     }
   }
 
-  /** 根据设备形态决定下载哪个 Release 资源 */
+  /** 根据设备形态决定下载哪个 Release 资源（v2.1.0 逻辑，保持不变） */
   detectTarget(): UpdateTarget {
     const os = String((Platform as any)?.OS ?? "").toLowerCase();
 
-    // 鸿蒙 NEXT 无法安装 Android APK，只能走鸿蒙 Web 包 / Release 页面
     if (DeviceUtils.isHarmonyOSNext()) return "harmony-next";
 
     if (os === "web") {
@@ -105,65 +152,109 @@ class UpdateService {
     );
   }
 
-  /**
-   * 检查最新版本。
-   * GitHub API → raw.github → jsDelivr → github.com/raw，任一成功即返回。
-   */
-  async checkVersion(): Promise<VersionInfo> {
-    const target = this.detectTarget();
-    const failures: string[] = [];
+  private fromRelease(release: GithubRelease, target: UpdateTarget): VersionInfo {
+    const version = this.normalizeVersion(release.tag_name);
+    if (!version) throw new Error(`无法识别版本号 ${release.tag_name}`);
+    const asset = this.pickAsset(release.assets ?? [], target, version);
+    const inAppInstall = !!asset && IN_APP_INSTALL_TARGETS.includes(target);
+    return {
+      version,
+      downloadUrl: asset?.browser_download_url ?? UPDATE_CONFIG.getDownloadUrl(version, target),
+      releasePageUrl: UPDATE_CONFIG.getReleasePageUrl(version),
+      assetName: asset?.name ?? UPDATE_CONFIG.getAssetName(target, version),
+      releaseNotes: release.body ?? "",
+      target,
+      inAppInstall,
+      source: "github-api",
+    };
+  }
 
-    // 1) GitHub Releases API：能拿到 tag、说明与真实资源名（最可靠）
+  private fromPackage(pkg: { version?: string }, target: UpdateTarget): VersionInfo {
+    const version = this.normalizeVersion(pkg.version ?? "");
+    if (!version) throw new Error("package.json 中没有有效版本号");
+    return {
+      version,
+      downloadUrl: UPDATE_CONFIG.getDownloadUrl(version, target),
+      releasePageUrl: UPDATE_CONFIG.getReleasePageUrl(version),
+      assetName: UPDATE_CONFIG.getAssetName(target, version),
+      releaseNotes: "",
+      target,
+      inAppInstall: IN_APP_INSTALL_TARGETS.includes(target),
+      source: "package-json",
+    };
+  }
+
+  /**
+   * 检查最新版本：Releases API 与全部镜像**并发竞速**，谁先成功用谁。
+   * API 信息更完整（含真实资源名 / 更新说明），因此给一个 1.2s 的优先窗口；
+   * 窗口内没返回就立即采用最先成功的镜像结果，不再串行等待超时。
+   */
+  async checkVersion(force = false): Promise<VersionInfo> {
+    if (!force && this.cached && Date.now() - this.cached.at < UPDATE_CONFIG.CACHE_TTL_MS) {
+      logger.debug("checkVersion served from cache");
+      return this.cached.info;
+    }
+    if (this.inFlight) return this.inFlight;
+
+    this.inFlight = this.raceVersionInfo()
+      .then((info) => {
+        this.cached = { info, at: Date.now() };
+        return info;
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
+    return this.inFlight;
+  }
+
+  private async raceVersionInfo(): Promise<VersionInfo> {
+    const target = this.detectTarget();
+    const controller = new AbortController();
+    const timeout = UPDATE_CONFIG.CHECK_TIMEOUT_MS;
+
+    const apiPromise = swallowRejection(
+      this.fetchJson<GithubRelease>(
+        UPDATE_CONFIG.GITHUB_API_URL,
+        timeout,
+        {},
+        controller.signal,
+      ).then((release) => this.fromRelease(release, target)),
+    );
+
+    const mirrorPromises = UPDATE_CONFIG.getVersionMirrorUrls().map((url) =>
+      swallowRejection(
+        this.fetchJson<{ version?: string }>(url, timeout, { Accept: "application/json" }, controller.signal).then(
+          (pkg) => this.fromPackage(pkg, target),
+        ),
+      ),
+    );
+
     try {
-      const release = await this.fetchJson<GithubRelease>(UPDATE_CONFIG.GITHUB_API_URL, 8000);
-      const version = this.normalizeVersion(release.tag_name);
-      if (!version) throw new Error(`无法识别版本号 ${release.tag_name}`);
-      const asset = this.pickAsset(release.assets ?? [], target, version);
-      const inAppInstall = !!asset && IN_APP_INSTALL_TARGETS.includes(target);
-      return {
-        version,
-        downloadUrl: asset?.browser_download_url ?? UPDATE_CONFIG.getDownloadUrl(version, target),
-        releasePageUrl: UPDATE_CONFIG.getReleasePageUrl(version),
-        assetName: asset?.name ?? UPDATE_CONFIG.getAssetName(target, version),
-        releaseNotes: release.body ?? "",
-        target,
-        inAppInstall,
-        source: "github-api",
-      };
+      // 1) 给 API 一个短暂的优先窗口
+      const apiResult = await Promise.race([
+        apiPromise.then((info) => info).catch(() => null),
+        delay(UPDATE_CONFIG.API_PRIORITY_WINDOW_MS).then(() => null),
+      ]);
+      if (apiResult) {
+        logger.debug("checkVersion via GitHub API (priority window)");
+        return apiResult;
+      }
+      // 2) 否则取任意最先成功的源
+      const info = await firstFulfilled<VersionInfo>([apiPromise, ...mirrorPromises]);
+      logger.debug(`checkVersion via ${info.source}`);
+      return info;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      failures.push(`GitHub API: ${message}`);
-      logger.warn(`checkVersion via GitHub API failed: ${message}`);
-    }
-
-    // 2) package.json 镜像：API 限流时仍能判断是否出现新版本
-    for (const url of UPDATE_CONFIG.GITHUB_RAW_URLS) {
+      logger.error("checkVersion failed", error);
+      throw new Error(`无法获取版本信息（${message}）`);
+    } finally {
+      // 终止仍在等待的请求，避免后台继续占用连接
       try {
-        const pkg = await this.fetchJson<{ version?: string }>(url, 6000);
-        const version = this.normalizeVersion(pkg.version ?? "");
-        if (!version) throw new Error("package.json 中没有有效版本号");
-        const inAppInstall = IN_APP_INSTALL_TARGETS.includes(target);
-        return {
-          version,
-          downloadUrl: UPDATE_CONFIG.getDownloadUrl(version, target),
-          releasePageUrl: UPDATE_CONFIG.getReleasePageUrl(version),
-          assetName: UPDATE_CONFIG.getAssetName(target, version),
-          releaseNotes: "",
-          target,
-          // Actions 的资源命名固定，镜像回退时可直接拼接下载地址；同时保留 Release 页面兜底
-          inAppInstall,
-          source: "package-json",
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        failures.push(`镜像 ${url.split("/")[2] ?? "未知"}: ${message}`);
-        logger.warn(`checkVersion via mirror failed: ${message}`);
+        controller.abort();
+      } catch {
+        // ignore
       }
     }
-
-    const error = new Error(`无法获取版本信息（${failures.join("；")}）`);
-    logger.error("checkVersion failed", error);
-    throw error;
   }
 
   /** 兼容 "v2.1.0"、"release-2.1.0" 等 tag 写法 */
@@ -202,47 +293,122 @@ class UpdateService {
     }
   }
 
-  /** 通用下载：APK / ZIP / IPA 均可用，进度回调统一为百分比 */
+  /**
+   * 单次下载：进度停滞看门狗 + 主动暂停保存 resumeData。
+   * 大安装包（APK 60MB+）在网络抖动时最容易「卡住不动」，这里主动判定并换源续传。
+   */
+  private downloadOnce(
+    url: string,
+    fileUri: string,
+    onProgress: ((percent: number) => void) | undefined,
+    resumeData: string | null,
+  ): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      let lastProgressAt = Date.now();
+      let settled = false;
+      const factory = FileSystem as any;
+      const task = factory.createDownloadResumable(
+        url,
+        fileUri,
+        {},
+        (progress: any) => {
+          lastProgressAt = Date.now();
+          if (onProgress && progress?.totalBytesExpectedToWrite) {
+            onProgress(
+              Math.floor((progress.totalBytesWritten / progress.totalBytesExpectedToWrite) * 100),
+            );
+          }
+        },
+        resumeData ?? undefined,
+      );
+
+      const watchdog = setInterval(() => {
+        if (settled || Date.now() - lastProgressAt < UPDATE_CONFIG.DOWNLOAD_STALL_MS) return;
+        settled = true;
+        clearInterval(watchdog);
+        void (async () => {
+          try {
+            const paused = await task.pauseAsync?.();
+            this.resumeData = paused?.resumeData ?? null;
+          } catch {
+            this.resumeData = null;
+          }
+          try {
+            await task.cancelAsync?.();
+          } catch {
+            // ignore
+          }
+          reject(new Error("下载进度停滞，准备换源续传"));
+        })();
+      }, 2000);
+
+      void task
+        .downloadAsync()
+        .then((result: any) => {
+          if (settled) return;
+          settled = true;
+          clearInterval(watchdog);
+          if (result?.uri) resolve(result.uri);
+          else reject(new Error("下载未返回文件地址"));
+        })
+        .catch((error: unknown) => {
+          if (settled) return;
+          settled = true;
+          clearInterval(watchdog);
+          reject(error);
+        });
+    });
+  }
+
+  /** 通用下载：多源换线 + 断点续传 + 停滞检测 + 完整性校验 */
   async downloadRelease(
     url: string,
     fileName: string,
     onProgress?: (percent: number) => void,
+    candidates?: string[],
   ): Promise<string> {
     const dirUri = FileSystem.documentDirectory;
     if (!dirUri) throw new Error("当前平台不支持应用内下载，请在浏览器中下载");
 
     await this.cleanOldDownloads();
-    const maxRetries = 2;
-    let lastError: unknown;
+    const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fileUri = `${dirUri}${safeName}`;
+    const urls = (candidates?.length ? candidates : [url]).filter(Boolean);
+    const maxAttempts = Math.min(UPDATE_CONFIG.DOWNLOAD_MAX_RETRIES, Math.max(urls.length, 2));
+    let lastError: unknown = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const downloadUrl = urls[attempt % urls.length];
       try {
-        const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const fileUri = `${dirUri}${safeName}`;
-        const task = FileSystem.createDownloadResumable(
-          url,
-          fileUri,
-          {},
-          (progress) => {
-            if (onProgress && progress.totalBytesExpectedToWrite) {
-              onProgress(
-                Math.floor(
-                  (progress.totalBytesWritten / progress.totalBytesExpectedToWrite) * 100,
-                ),
-              );
-            }
-          },
-        );
-        const result = await task.downloadAsync();
-        if (result?.uri) return result.uri;
-        throw new Error("下载未返回文件地址");
+        // 已完整下载过的安装包直接复用，避免重复流量
+        const existing = await FileSystem.getInfoAsync(fileUri);
+        if (existing.exists && (existing.size ?? 0) >= UPDATE_CONFIG.MIN_ASSET_BYTES) {
+          onProgress?.(100);
+          return fileUri;
+        }
+
+        const resultUri = await this.downloadOnce(downloadUrl, fileUri, onProgress, this.resumeData);
+        const info = await FileSystem.getInfoAsync(resultUri);
+        if (!info.exists || (info.size ?? 0) < UPDATE_CONFIG.MIN_ASSET_BYTES) {
+          throw new Error("下载文件不完整（可能是镜像返回了错误页）");
+        }
+        this.resumeData = null;
+        return resultUri;
       } catch (error) {
         lastError = error;
-        logger.warn(`downloadRelease attempt ${attempt}/${maxRetries}`, error);
-        if (attempt < maxRetries) await new Promise((r) => setTimeout(r, 1500 * attempt));
+        logger.warn(`downloadRelease attempt ${attempt + 1}/${maxAttempts}`, error);
+        if (!this.resumeData) {
+          // 没有续传数据时清掉残缺文件，保证下一次是干净下载
+          await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
+        }
+        if (attempt < maxAttempts - 1) {
+          onProgress?.(0);
+          await delay(600 * (attempt + 1));
+        }
       }
     }
 
+    this.resumeData = null;
     Toast.show({
       type: "error",
       text1: "下载失败",
@@ -302,7 +468,6 @@ class UpdateService {
       await Linking.openURL(url);
       return;
     }
-    // Web / Electron 容器下 canOpenURL 可能返回 false，直接用浏览器窗口打开
     const opened = (globalThis as any)?.window?.open?.(url, "_blank", "noopener,noreferrer");
     if (!opened) throw new Error("无法打开浏览器，请手动访问 GitHub Release 页面");
   }

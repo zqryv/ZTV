@@ -1,16 +1,14 @@
 /**
- * 收音机页（分类「收音机」）。
+ * 收音机页（v2.3.0 按「3 界面 × 4 设备」设计稿收紧布局）。
  *
- * 界面按工作区设计方案「19 收音机 Radio」（Ardot 设计稿 750387664062996）重新排布：
- * 全宽「调谐器焦点卡」（正在播出徽标 / FM 频率 / 台名 / 波形律动 / 四个圆形控制）
- * → 「探索电台」+ 一行分类胶囊 → 电台卡片列表；地区 / 在线目录 / 音量收进可折叠
- * 面板，去掉原先一屏堆满控件的杂乱感。
+ * - 宽屏：左栏约 38~40% 放「调谐器焦点卡」+ 分类胶囊 + 折叠筛选；
+ *   右栏放「探索电台」与完整电台卡片列表（电视单列 5 张填满、桌面双列）；
+ * - 手机：调谐器卡压缩后置于顶部，下方为紧凑电台列表；
+ * - 全部尺寸来自 useCompactLayout，与搜索 / 音乐在线共用同一标尺。
  *
- * 本次仅替换界面层，以下能力全部沿用 v2.2.0，接口与交互逻辑零改动：
- *  - 28 个实测可直连的内置电台（中国 / 欧美 / 日本 / 韩国）+ 首次进入静默补充在线目录
- *  - 地区 / 分类双维筛选、在线目录刷新与失败降级、自定义电台增删、音量档位
- *  - TV 遥控器上下选台 / 左右切台 / select 播放、明确的「停止」按钮
- *  - useFocusEffect 失焦停止 + 根布局 AppState 监听，退出即停止并释放 expo-av 资源
+ * 功能与数据接口零改动：内置电台 + 在线目录补充、地区 / 分类双维筛选、
+ * 自定义电台增删、音量档位、TV 遥控器、明确的「停止」、
+ * useFocusEffect 失焦停止与资源释放。
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -46,6 +44,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { StyledButton } from "@/components/StyledButton";
 import { Colors } from "@/constants/Colors";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { useCompactLayout, CompactMetrics } from "@/utils/DesignTokens";
 import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
@@ -63,10 +62,7 @@ import { loadOnlineStations } from "@/services/onlineMusic";
 /** 波形律动条的基础高度（播放时按此序列呈现律动，暂停时压平） */
 const WAVE_BARS = [10, 18, 28, 16, 36, 22, 42, 30, 38, 20, 32, 14, 26, 18, 30, 12, 22, 10];
 
-/**
- * 设计稿右上角的 FM 频率读数。内置电台为网络流、本身没有频率字段，
- * 这里按 id 生成稳定的展示值（仅展示层，不改变数据接口）。
- */
+/** 设计稿 FM 频率读数：内置网络流没有频率字段，按 id 生成稳定展示值（纯展示层） */
 const dialFrequency = (station: RadioStation | null) => {
   if (!station) return "FM --.-";
   let sum = 0;
@@ -77,8 +73,9 @@ const dialFrequency = (station: RadioStation | null) => {
 export default function RadioScreen() {
   const responsiveConfig = useResponsiveLayout();
   const commonStyles = getCommonResponsiveStyles(responsiveConfig);
-  const { deviceType, spacing } = responsiveConfig;
-  const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
+  const { spacing } = responsiveConfig;
+  const metrics = useCompactLayout();
+  const { isWide, isTVLike } = metrics;
 
   const {
     stations,
@@ -148,10 +145,7 @@ export default function RadioScreen() {
     }, [])
   );
 
-  /**
-   * 首次进入静默补充在线电台；失败也无所谓——内置电台已可正常收听。
-   * 这是「打开就有可用电台」的保障，不把可用性建立在外部目录上。
-   */
+  /** 首次进入静默补充在线电台；失败也无所谓——内置电台已可正常收听 */
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
@@ -234,7 +228,6 @@ export default function RadioScreen() {
     setNewName("");
     setNewCategory("");
     setNewUrl("");
-    // 直接用返回的 station 播放，避免闭包里的 stations 尚未包含新电台
     setCurrentStation(station.id);
     await audioPlayer.play(station.url, station.fallbackUrls);
     await audioPlayer.setVolume(volume);
@@ -276,7 +269,8 @@ export default function RadioScreen() {
     setFocusIndex(0);
   }, []);
 
-  const dyn = useMemo(() => createStyles(deviceType, spacing), [deviceType, spacing]);
+  const dyn = useMemo(() => createStyles(metrics, spacing), [metrics, spacing]);
+  const numColumns = isTVLike ? 1 : isWide ? 2 : 1;
 
   const renderStation = ({ item, index }: { item: RadioStation; index: number }) => {
     const isCurrent = item.id === currentStationId;
@@ -286,9 +280,9 @@ export default function RadioScreen() {
       <TouchableOpacity
         style={[
           dyn.stationCard,
-          isWide && dyn.stationCardGrid,
+          numColumns > 1 && dyn.stationCardGrid,
           isCurrent && dyn.stationCardActive,
-          deviceType === "tv" && focusIndex === index && dyn.stationCardFocused,
+          deviceTypeTV(metrics) && focusIndex === index && dyn.stationCardFocused,
         ]}
         onPress={() => void startStation(item.id)}
         activeOpacity={0.75}
@@ -299,7 +293,7 @@ export default function RadioScreen() {
           end={{ x: 1, y: 1 }}
           style={dyn.stationIcon}
         >
-          <Radio size={deviceType === "tv" ? 26 : 20} color={item.accent} />
+          <Radio size={metrics.body + 4} color={item.accent} />
         </LinearGradient>
         <View style={dyn.stationInfo}>
           <View style={dyn.stationTitleRow}>
@@ -318,13 +312,13 @@ export default function RadioScreen() {
         </View>
         {isDeletable && (
           <TouchableOpacity onPress={() => handleDelete(item)} style={dyn.deleteBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Trash2 size={15} color={Colors.text.tertiary} />
+            <Trash2 size={14} color={Colors.text.tertiary} />
           </TouchableOpacity>
         )}
         <View style={[dyn.stationPlay, isCurrent && playback.isPlaying && dyn.stationPlayActive]}>
           {isCurrent && playback.isPlaying
-            ? <Pause size={15} color={Colors.brand.onAccent} />
-            : <Play size={15} color={Colors.text.primary} />}
+            ? <Pause size={14} color={Colors.brand.onAccent} />
+            : <Play size={14} color={Colors.text.primary} />}
         </View>
       </TouchableOpacity>
     );
@@ -338,16 +332,14 @@ export default function RadioScreen() {
     ? "已停止"
     : "待收听";
 
-  // ── 设计稿页头：标题 + 副标题 + 圆形「+」 ────────────────────────────────
+  // ── 页头 ────────────────────────────────────────────────────────────────
   const pageHeader = (
     <View style={dyn.pageHeader}>
-      <View style={dyn.pageTitleRow}>
-        <View style={dyn.pageTitleText}>
-          <ThemedText style={dyn.pageTitle}>收音机</ThemedText>
-          <ThemedText style={dyn.pageSubtitle} numberOfLines={1}>
-            {`网络电台 · 实时收听 · 内置 ${BUILTIN_RADIO_STATIONS.length} 台 / 在线 ${onlineCount} 台`}
-          </ThemedText>
-        </View>
+      <View style={dyn.pageTitleText}>
+        <ThemedText style={dyn.pageTitle}>收音机</ThemedText>
+        <ThemedText style={dyn.pageSubtitle} numberOfLines={1}>
+          {`网络电台 · 实时收听 · 内置 ${BUILTIN_RADIO_STATIONS.length} 台 / 在线 ${onlineCount} 台`}
+        </ThemedText>
       </View>
       <TouchableOpacity
         style={dyn.addRound}
@@ -355,16 +347,16 @@ export default function RadioScreen() {
         accessibilityLabel="添加电台"
         activeOpacity={0.75}
       >
-        <Plus size={22} color={Colors.brand.onAccent} />
+        <Plus size={metrics.body + 6} color={Colors.brand.onAccent} />
       </TouchableOpacity>
     </View>
   );
 
-  // ── 调谐器焦点卡 ────────────────────────────────────────────────────────
+  // ── 左栏：调谐器焦点卡（按栏宽收紧）+ 分类 + 折叠筛选 ───────────────────
   const heroCard = (
     <LinearGradient
       colors={[`${currentStation?.accent ?? Colors.brand.accent}A6`, "#0C2A23", Colors.surface.base]}
-      style={[dyn.heroCard, !isWide && dyn.heroCardCompact]}
+      style={dyn.heroCard}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
@@ -379,7 +371,7 @@ export default function RadioScreen() {
       <ThemedText style={dyn.heroTitle} numberOfLines={1}>
         {currentStation ? currentStation.name : "选择一个电台开始收听"}
       </ThemedText>
-      <ThemedText style={dyn.heroDesc} numberOfLines={1}>
+      <ThemedText style={dyn.heroDesc} numberOfLines={2}>
         {currentStation
           ? [currentStation.category, currentStation.country, currentStation.description].filter(Boolean).join(" · ")
           : "内置电台即点即播，无需联网加载目录"}
@@ -388,16 +380,15 @@ export default function RadioScreen() {
       <View style={dyn.waveRow}>
         {WAVE_BARS.map((h, i) => (
           <View key={i} style={[dyn.waveBar, {
-            height: playback.isPlaying ? h : 6,
+            height: playback.isPlaying ? Math.min(h, 30) : 5,
             backgroundColor: i % 4 === 0 ? "rgba(255,255,255,0.72)" : Colors.brand.accent,
           }]} />
         ))}
       </View>
 
-      {/* 四个圆形控制：上一台 / 播放暂停 / 下一台 / 音量与筛选 */}
       <View style={dyn.heroControls}>
         <TouchableOpacity style={dyn.roundCtrl} onPress={() => stepStation(-1)} accessibilityLabel="上一个电台" activeOpacity={0.75}>
-          <SkipBack size={19} color="#fff" />
+          <SkipBack size={metrics.body + 3} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity
           style={dyn.playRound}
@@ -413,11 +404,11 @@ export default function RadioScreen() {
           activeOpacity={0.8}
         >
           {playback.isPlaying
-            ? <Pause size={26} color={Colors.brand.onAccent} />
-            : <Play size={26} color={Colors.brand.onAccent} />}
+            ? <Pause size={metrics.body + 10} color={Colors.brand.onAccent} />
+            : <Play size={metrics.body + 10} color={Colors.brand.onAccent} />}
         </TouchableOpacity>
         <TouchableOpacity style={dyn.roundCtrl} onPress={() => stepStation(1)} accessibilityLabel="下一个电台" activeOpacity={0.75}>
-          <SkipForward size={19} color="#fff" />
+          <SkipForward size={metrics.body + 3} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity
           style={dyn.roundCtrl}
@@ -425,35 +416,12 @@ export default function RadioScreen() {
           accessibilityLabel="音量与更多筛选"
           activeOpacity={0.75}
         >
-          <Volume2 size={19} color="#fff" />
+          <Volume2 size={metrics.body + 3} color="#fff" />
         </TouchableOpacity>
       </View>
     </LinearGradient>
   );
 
-  // ── 探索电台：标题 + 查看全部 / 停止 ────────────────────────────────────
-  const exploreHeader = (
-    <View style={dyn.exploreHeader}>
-      <View style={dyn.exploreTitleRow}>
-        <ListMusic size={16} color={Colors.brand.accent} />
-        <ThemedText style={dyn.exploreTitle}>探索电台</ThemedText>
-        <ThemedText style={dyn.exploreCount} numberOfLines={1}>
-          {`${filtered.length} 个 · 内置 ${builtinCount}`}
-        </ThemedText>
-      </View>
-      <View style={dyn.exploreActions}>
-        <TouchableOpacity onPress={showAllStations} style={dyn.textAction} activeOpacity={0.75}>
-          <ThemedText style={dyn.textActionAccent}>查看全部</ThemedText>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => void stopStation()} style={dyn.textAction} activeOpacity={0.75}>
-          <Square size={12} color={Colors.text.secondary} />
-          <ThemedText style={dyn.textActionMuted}>停止</ThemedText>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  // ── 一行分类胶囊（常显），末尾为「更多筛选」入口 ────────────────────────
   const categoryBar = (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dyn.categoryBar}>
       {categories.map((item) => (
@@ -475,12 +443,11 @@ export default function RadioScreen() {
         style={dyn.pillMore}
         textStyle={dyn.pillText}
       >
-        <Globe size={13} color={Colors.brand.accent} />
+        <Globe size={12} color={Colors.brand.accent} />
       </StyledButton>
     </ScrollView>
   );
 
-  // ── 可折叠面板：地区 / 在线目录 / 音量 ──────────────────────────────────
   const filterPanel = filtersOpen ? (
     <View style={dyn.filterPanel}>
       <ThemedText style={dyn.fieldLabel}>地区</ThemedText>
@@ -494,13 +461,13 @@ export default function RadioScreen() {
         <StyledButton text={onlineLoading ? "加载中…" : "刷新在线目录"} variant="primary"
           onPress={() => void handleLoadOnline()} disabled={onlineLoading}
           style={dyn.onlineButton} textStyle={dyn.onlineButtonText}>
-          <RefreshCw size={13} color="#fff" />
+          <RefreshCw size={12} color="#fff" />
         </StyledButton>
         <ThemedText style={dyn.onlineHint} numberOfLines={1}>内置电台无需联网即可收听</ThemedText>
       </View>
       {!!onlineError && <ThemedText style={dyn.onlineErrorText}>{onlineError}</ThemedText>}
       <View style={dyn.volumeRow}>
-        <Volume2 size={15} color={Colors.text.secondary} />
+        <Volume2 size={14} color={Colors.text.secondary} />
         {[0.25, 0.5, 0.75, 1].map((v) => (
           <TouchableOpacity key={v} onPress={() => { setVolume(v); void audioPlayer.setVolume(v); }}
             style={[dyn.volumeChip, volume === v && dyn.volumeChipActive]}>
@@ -515,19 +482,55 @@ export default function RadioScreen() {
     <ThemedText style={dyn.errorText}>{playback.error}</ThemedText>
   ) : null;
 
-  // 焦点卡全宽置顶，下方为分类 + 电台卡片（宽屏两列网格）
+  const leftColumn = (
+    <View style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}>
+      {heroCard}
+      {categoryBar}
+      {filterPanel}
+      {errorLine}
+    </View>
+  );
+
+  // ── 右栏：探索电台 + 完整列表 ───────────────────────────────────────────
+  const exploreHeader = (
+    <View style={dyn.exploreHeader}>
+      <View style={dyn.exploreTitleRow}>
+        <ListMusic size={metrics.body + 2} color={Colors.brand.accent} />
+        <ThemedText style={dyn.exploreTitle}>探索电台</ThemedText>
+        <ThemedText style={dyn.exploreCount} numberOfLines={1}>
+          {`${filtered.length} 个 · 内置 ${builtinCount}`}
+        </ThemedText>
+      </View>
+      <View style={dyn.exploreActions}>
+        <TouchableOpacity onPress={showAllStations} style={dyn.textAction} activeOpacity={0.75}>
+          <ThemedText style={dyn.textActionAccent}>查看全部</ThemedText>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => void stopStation()} style={dyn.textAction} activeOpacity={0.75}>
+          <Square size={11} color={Colors.text.secondary} />
+          <ThemedText style={dyn.textActionMuted}>停止</ThemedText>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   const stationList = (
     <FlatList
       data={filtered}
       renderItem={renderStation}
       keyExtractor={(item) => item.id}
-      numColumns={isWide ? 2 : 1}
-      columnWrapperStyle={isWide ? dyn.gridRow : undefined}
+      numColumns={numColumns}
+      columnWrapperStyle={numColumns > 1 ? dyn.gridRow : undefined}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={dyn.listContent}
-      ListHeaderComponent={<View>{exploreHeader}{categoryBar}{filterPanel}{errorLine}</View>}
       ListEmptyComponent={<ThemedText style={dyn.emptyText}>该筛选下暂无电台，可点右上角添加或「查看全部」</ThemedText>}
     />
+  );
+
+  const rightColumn = (
+    <View style={[dyn.rightColumn, isWide && dyn.rightColumnWide]}>
+      {exploreHeader}
+      {stationList}
+    </View>
   );
 
   const modal = (
@@ -538,7 +541,7 @@ export default function RadioScreen() {
           <View style={dyn.modalHeader}>
             <ThemedText style={dyn.modalTitle}>添加网络电台</ThemedText>
             <TouchableOpacity onPress={() => setAddModalVisible(false)}>
-              <X size={20} color={Colors.text.secondary} />
+              <X size={18} color={Colors.text.secondary} />
             </TouchableOpacity>
           </View>
           <ThemedText style={dyn.modalHint}>填入电台音频流地址（mp3 / aac / m3u8）</ThemedText>
@@ -564,13 +567,15 @@ export default function RadioScreen() {
   const content = (
     <ThemedView style={[commonStyles.container, dyn.container]}>
       {pageHeader}
-      {heroCard}
-      {stationList}
+      <View style={[dyn.columns, isWide && dyn.columnsWide]}>
+        {leftColumn}
+        {rightColumn}
+      </View>
       {modal}
     </ThemedView>
   );
 
-  if (deviceType === "tv") return content;
+  if (metrics.deviceType === "tv") return content;
   return (
     <ResponsiveNavigation>
       <ResponsiveHeader title="收音机" showBackButton />
@@ -579,149 +584,156 @@ export default function RadioScreen() {
   );
 }
 
-const createStyles = (deviceType: string, spacing: number) => {
-  const isTV = deviceType === "tv";
-  const isWide = deviceType === "tv" || deviceType === "desktop" || deviceType === "tablet";
-  return StyleSheet.create({
-    container: { flex: 1, paddingTop: isTV ? 40 : 0, paddingHorizontal: spacing, paddingBottom: spacing },
+/** TV 焦点态只在电视 / 机顶盒生效 */
+const deviceTypeTV = (m: CompactMetrics) => m.isTVLike;
 
-    /* 设计稿页头 */
+const createStyles = (m: CompactMetrics, spacing: number) =>
+  StyleSheet.create({
+    container: {
+      flex: 1, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
+      paddingHorizontal: spacing, paddingBottom: spacing / 2,
+    },
     pageHeader: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      marginBottom: spacing, marginTop: isTV ? spacing : spacing / 2, gap: 8,
+      marginBottom: m.gap, marginTop: m.isTVLike ? m.gap : m.gap / 2, gap: 8,
     },
-    pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
     pageTitleText: { flexShrink: 1 },
-    pageTitle: { fontSize: isTV ? 32 : 24, fontWeight: "bold" },
-    pageSubtitle: { fontSize: 11, color: Colors.text.tertiary, marginTop: 3 },
+    pageTitle: { fontSize: m.pageTitle, fontWeight: "bold" },
+    pageSubtitle: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
     addRound: {
-      width: isTV ? 50 : 42, height: isTV ? 50 : 42, borderRadius: isTV ? 25 : 21,
+      width: m.headerHeight, height: m.headerHeight, borderRadius: m.headerHeight / 2,
       backgroundColor: Colors.brand.accent, alignItems: "center", justifyContent: "center",
     },
 
-    /* 调谐器焦点卡 */
+    columns: { flex: 1, flexDirection: "column", minHeight: 0 },
+    columnsWide: { flexDirection: "row", gap: m.gap * 1.5 },
+    leftColumn: { flexShrink: 0 },
+    leftColumnWide: { width: m.leftWidth, flexShrink: 0 },
+    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, marginTop: m.gap },
+    rightColumnWide: { flex: 1, marginTop: 0 },
+
+    /* 调谐器焦点卡：按左栏宽度收紧 */
     heroCard: {
-      borderRadius: 24, padding: isTV ? 28 : 20, marginBottom: spacing, overflow: "hidden",
+      borderRadius: m.radius, padding: m.cardPadding, marginBottom: m.gap, overflow: "hidden",
       borderWidth: 1, borderColor: "rgba(0,230,168,0.18)",
     },
-    heroCardCompact: { padding: 18, marginBottom: spacing / 2 },
     heroTopRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
     liveBadge: {
-      flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 5,
-      borderRadius: 12, backgroundColor: "rgba(0,0,0,0.28)",
+      flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4,
+      borderRadius: 10, backgroundColor: "rgba(0,0,0,0.28)",
     },
-    liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: Colors.brand.live },
-    liveBadgeText: { fontSize: 11, fontWeight: "600", color: "#fff" },
-    heroFreq: { fontSize: isTV ? 15 : 13, fontWeight: "700", color: "#fff", letterSpacing: 1 },
-    heroTitle: { fontSize: isTV ? 30 : isWide ? 24 : 21, fontWeight: "700", color: "#fff", marginTop: 14 },
-    heroDesc: { fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 6 },
+    liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.brand.live },
+    liveBadgeText: { fontSize: m.caption, fontWeight: "600", color: "#fff" },
+    heroFreq: { fontSize: m.caption + 2, fontWeight: "700", color: "#fff", letterSpacing: 1 },
+    heroTitle: { fontSize: m.sectionTitle + 3, fontWeight: "700", color: "#fff", marginTop: m.gap },
+    heroDesc: { fontSize: m.caption, color: "rgba(255,255,255,0.78)", marginTop: 4 },
     waveRow: {
-      flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
-      height: isWide ? 48 : 38, marginVertical: isTV ? 18 : 12,
+      flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 3,
+      height: 34, marginVertical: m.gap,
     },
-    waveBar: { width: 4, borderRadius: 2 },
+    waveBar: { width: 3, borderRadius: 2 },
     heroControls: {
       flexDirection: "row", alignItems: "center", justifyContent: "center",
-      gap: isTV ? 22 : 16, marginTop: 4,
+      gap: m.gap, marginTop: 2,
     },
     roundCtrl: {
-      width: isTV ? 56 : 46, height: isTV ? 56 : 46, borderRadius: isTV ? 28 : 23,
+      width: m.roundControl, height: m.roundControl, borderRadius: m.roundControl / 2,
       alignItems: "center", justifyContent: "center",
       borderWidth: 1, borderColor: "rgba(255,255,255,0.45)", backgroundColor: "rgba(255,255,255,0.06)",
     },
     playRound: {
-      width: isTV ? 72 : 62, height: isTV ? 72 : 62, borderRadius: isTV ? 36 : 31,
+      width: m.playButton, height: m.playButton, borderRadius: m.playButton / 2,
       backgroundColor: "#fff", alignItems: "center", justifyContent: "center",
     },
+
+    /* 分类胶囊 / 折叠筛选 */
+    categoryBar: { marginBottom: m.gapSm, flexGrow: 0 },
+    pill: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, marginRight: 6 },
+    pillMore: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, flexDirection: "row", gap: 4 },
+    pillText: { fontSize: m.caption + 1 },
+    filterPanel: {
+      borderRadius: m.radiusSm, borderWidth: 1, borderColor: Colors.surface.border,
+      backgroundColor: Colors.surface.raised, padding: m.gapSm + 2, marginBottom: m.gapSm,
+    },
+    fieldLabel: { fontSize: m.caption, color: Colors.text.tertiary, marginBottom: 5 },
+    filterBar: { marginBottom: m.gapSm, flexGrow: 0 },
+    onlineRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+    onlineButton: { borderRadius: 18, paddingHorizontal: 12, flexDirection: "row", gap: 5 },
+    onlineButtonText: { fontSize: m.caption + 1 },
+    onlineHint: { fontSize: m.caption, color: Colors.text.tertiary, flex: 1 },
+    onlineErrorText: { color: "#FFB86B", fontSize: m.caption + 1, marginBottom: 6 },
+    volumeRow: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
+    volumeChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: Colors.surface.overlay },
+    volumeChipActive: { backgroundColor: "rgba(0,230,168,0.2)", borderWidth: 1, borderColor: Colors.brand.accent },
+    volumeText: { fontSize: m.caption },
+    errorText: { color: "#ff6b6b", fontSize: m.caption + 1, textAlign: "center", marginBottom: 6 },
 
     /* 探索电台 */
     exploreHeader: {
       flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-      gap: 8, marginBottom: 10, flexWrap: "wrap",
+      gap: 8, marginBottom: m.gapSm, flexWrap: "wrap",
     },
-    exploreTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1 },
-    exploreTitle: { fontSize: 16, fontWeight: "700" },
-    exploreCount: { fontSize: 11, color: Colors.text.tertiary },
-    exploreActions: { flexDirection: "row", alignItems: "center", gap: 12 },
-    textAction: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 4 },
-    textActionAccent: { fontSize: 12, fontWeight: "600", color: Colors.brand.accent },
-    textActionMuted: { fontSize: 12, color: Colors.text.secondary },
-
-    /* 分类胶囊 / 折叠筛选 */
-    categoryBar: { marginBottom: 10, flexGrow: 0 },
-    pill: { borderRadius: 20, paddingHorizontal: 15, paddingVertical: 7, marginRight: 8 },
-    pillMore: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7, flexDirection: "row", gap: 5 },
-    pillText: { fontSize: 12 },
-    filterPanel: {
-      borderRadius: 14, borderWidth: 1, borderColor: Colors.surface.border,
-      backgroundColor: Colors.surface.raised, padding: 12, marginBottom: spacing,
-    },
-    fieldLabel: { fontSize: 11, color: Colors.text.tertiary, marginBottom: 6 },
-    filterBar: { marginBottom: 10, flexGrow: 0 },
-    onlineRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
-    onlineButton: { borderRadius: 20, paddingHorizontal: 14, flexDirection: "row", gap: 6 },
-    onlineButtonText: { fontSize: 12 },
-    onlineHint: { fontSize: 11, color: Colors.text.tertiary, flex: 1 },
-    onlineErrorText: { color: "#FFB86B", fontSize: 12, marginBottom: 8 },
-    volumeRow: { flexDirection: "row", alignItems: "center", gap: 5, flexWrap: "wrap" },
-    volumeChip: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 12, backgroundColor: Colors.surface.overlay },
-    volumeChipActive: { backgroundColor: "rgba(0,230,168,0.2)", borderWidth: 1, borderColor: Colors.brand.accent },
-    volumeText: { fontSize: 11 },
-    errorText: { color: "#ff6b6b", fontSize: 12, textAlign: "center", marginBottom: 8 },
+    exploreTitleRow: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1 },
+    exploreTitle: { fontSize: m.sectionTitle, fontWeight: "700" },
+    exploreCount: { fontSize: m.caption, color: Colors.text.tertiary },
+    exploreActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+    textAction: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 3 },
+    textActionAccent: { fontSize: m.caption + 1, fontWeight: "600", color: Colors.brand.accent },
+    textActionMuted: { fontSize: m.caption + 1, color: Colors.text.secondary },
 
     /* 电台卡片 */
-    gridRow: { gap: 10 },
-    listContent: { paddingBottom: spacing },
+    gridRow: { gap: m.gapSm },
+    listContent: { paddingBottom: m.gap },
     stationCard: {
       flexDirection: "row", alignItems: "center", backgroundColor: Colors.surface.raised,
-      borderRadius: 16, borderWidth: 1, borderColor: Colors.surface.border,
-      padding: isTV ? 16 : 12, marginBottom: 10, minWidth: 0,
+      borderRadius: m.radiusSm, borderWidth: 1, borderColor: Colors.surface.border,
+      padding: m.gapSm + 2, marginBottom: m.gapSm, minWidth: 0,
     },
     stationCardGrid: { flex: 1, marginRight: 0 },
     stationCardActive: { borderColor: Colors.brand.accent, backgroundColor: "rgba(0,230,168,0.08)" },
     stationCardFocused: { borderWidth: 2, borderColor: Colors.brand.accent },
     stationIcon: {
-      width: isTV ? 54 : 44, height: isTV ? 54 : 44, borderRadius: 12,
+      width: m.roundControl, height: m.roundControl, borderRadius: m.radiusSm - 2,
       alignItems: "center", justifyContent: "center",
     },
-    stationInfo: { flex: 1, marginLeft: 12, minWidth: 0 },
-    stationTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    stationName: { fontSize: isTV ? 18 : 14, fontWeight: "600", flexShrink: 1 },
+    stationInfo: { flex: 1, marginLeft: m.gapSm + 2, minWidth: 0 },
+    stationTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+    stationName: { fontSize: m.body + 1, fontWeight: "600", flexShrink: 1 },
     stationNameActive: { color: Colors.brand.accent },
-    stationDesc: { fontSize: 11, color: Colors.text.tertiary, marginTop: 3 },
-    stationTagRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 5 },
-    stationSource: { fontSize: 10, color: Colors.brand.accent },
-    stationCodec: { fontSize: 10, color: Colors.text.disabled },
-    deleteBtn: { padding: 6, marginLeft: 4 },
+    stationDesc: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
+    stationTagRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+    stationSource: { fontSize: m.caption, color: Colors.brand.accent },
+    stationCodec: { fontSize: m.caption, color: Colors.text.disabled },
+    deleteBtn: { padding: 4, marginLeft: 3 },
     stationPlay: {
-      width: isTV ? 38 : 32, height: isTV ? 38 : 32, borderRadius: isTV ? 19 : 16,
-      alignItems: "center", justifyContent: "center", marginLeft: 6,
+      width: m.roundControl - 6, height: m.roundControl - 6, borderRadius: (m.roundControl - 6) / 2,
+      alignItems: "center", justifyContent: "center", marginLeft: 4,
       borderWidth: 1, borderColor: Colors.surface.border, backgroundColor: Colors.surface.overlay,
     },
     stationPlayActive: { backgroundColor: Colors.brand.accent, borderColor: Colors.brand.accent },
-    emptyText: { fontSize: 13, color: Colors.text.tertiary, textAlign: "center", padding: 24 },
+    emptyText: { fontSize: m.body, color: Colors.text.tertiary, textAlign: "center", padding: 18 },
 
     /* 添加电台弹窗 */
-    modalOverlay: { flex: 1, backgroundColor: Colors.surface.scrim, alignItems: "center", justifyContent: "center", padding: 24 },
+    modalOverlay: { flex: 1, backgroundColor: Colors.surface.scrim, alignItems: "center", justifyContent: "center", padding: 20 },
     modalCard: {
-      width: "100%", maxWidth: 520, backgroundColor: Colors.surface.raised, borderRadius: 16,
-      borderWidth: 1, borderColor: Colors.surface.border, padding: 20,
+      width: "100%", maxWidth: 480, backgroundColor: Colors.surface.raised, borderRadius: m.radius,
+      borderWidth: 1, borderColor: Colors.surface.border, padding: 18,
     },
     modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-    modalTitle: { fontSize: 18, fontWeight: "bold" },
-    modalHint: { fontSize: 12, color: Colors.text.tertiary, marginTop: 6, marginBottom: 14 },
+    modalTitle: { fontSize: m.sectionTitle + 1, fontWeight: "bold" },
+    modalHint: { fontSize: m.caption + 1, color: Colors.text.tertiary, marginTop: 5, marginBottom: 12 },
     modalInput: {
-      height: 46, borderWidth: 1, borderColor: Colors.surface.border, borderRadius: 10,
-      paddingHorizontal: 12, fontSize: 14, backgroundColor: Colors.surface.overlay, color: "#fff", marginBottom: 10,
+      height: 42, borderWidth: 1, borderColor: Colors.surface.border, borderRadius: m.radiusSm - 2,
+      paddingHorizontal: 10, fontSize: m.body, backgroundColor: Colors.surface.overlay, color: "#fff", marginBottom: 8,
     },
     urlPrefixRow: { flexDirection: "row", alignItems: "center" },
     urlPrefix: {
-      fontSize: 14, color: Colors.brand.accent, fontWeight: "600", backgroundColor: Colors.surface.overlay,
+      fontSize: m.body, color: Colors.brand.accent, fontWeight: "600", backgroundColor: Colors.surface.overlay,
       borderLeftWidth: 1, borderTopWidth: 1, borderBottomWidth: 1, borderColor: Colors.surface.border,
-      borderTopLeftRadius: 10, borderBottomLeftRadius: 10, paddingHorizontal: 10, height: 46, textAlignVertical: "center",
+      borderTopLeftRadius: m.radiusSm - 2, borderBottomLeftRadius: m.radiusSm - 2,
+      paddingHorizontal: 8, height: 42, textAlignVertical: "center",
     },
     urlInput: { flex: 1, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, borderLeftWidth: 0 },
-    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 6 },
-    modalBtn: { borderRadius: 20, paddingHorizontal: 18 },
+    modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 4 },
+    modalBtn: { borderRadius: 18, paddingHorizontal: 16 },
   });
-};

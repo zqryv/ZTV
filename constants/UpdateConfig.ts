@@ -1,12 +1,14 @@
 /**
- * ZTV 自动更新配置。
+ * ZTV 自动更新配置（v2.3.0 稳定性重构）。
  *
- * 更新链路（v2.1.0 修复）：
- * 1. 优先请求 GitHub Releases API（/releases/latest），直接拿到 tag 与真实资源名；
- * 2. API 失败（限流 / 网络）时依次回退 raw.githubusercontent.com 与 jsDelivr 上的 package.json；
- * 3. 根据当前设备形态选择对应平台的安装包，并在不支持应用内安装时提供 Release 页面兜底。
+ * v2.1.0 的更新链路（Releases API 优先 + 按设备形态选包 + 浏览器兜底）设计正确，
+ * 但 v2.2.x 暴露出两个问题：
+ *  1) 版本检查是「API 8s → 镜像 6s × 3」的串行等待，最坏要等 26s 才出结果；
+ *     且 raw 镜像路径写成了 /refs/heads/main/...（恒 404），时间戳在模块加载时就固定了；
+ *  2) 下载大安装包时中断只能从头再来，重试仅 2 次，没有停滞检测与备用下载源。
  *
- * 发布新版本时只需推送 v* tag 触发 Actions，仓库地址无需再改。
+ * 本版修复：并发竞速 + 短超时、正确的镜像地址与请求时时间戳、结果缓存、
+ * 多下载源 + 停滞检测 + 完整性校验；平台资源映射与浏览器兜底保持不变。
  */
 const GITHUB_OWNER = "zqryv";
 const GITHUB_REPO = "ZTV";
@@ -56,20 +58,54 @@ export const TARGET_LABELS: Record<UpdateTarget, string> = {
   linux: "Linux",
 };
 
+/** 版本镜像：全部使用真实可访问路径，时间戳在「每次请求时」生成 */
+const VERSION_MIRROR_BUILDERS: Array<() => string> = [
+  () => `${GITHUB_RAW_BASE}/main/package.json?t=${Date.now()}`,
+  () => `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
+  () => `https://fastly.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
+  () => `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/raw/refs/heads/main/package.json?t=${Date.now()}`,
+];
+
+/** 安装包下载镜像：直连优先，失败后依次尝试（代理仅用于 GitHub 原始下载地址） */
+const DOWNLOAD_MIRROR_PREFIXES = [
+  "",
+  "https://ghfast.top/",
+  "https://gh-proxy.com/",
+];
+
 export const UPDATE_CONFIG = {
   AUTO_CHECK: true,
 
   // 12 小时自动检查一次
   CHECK_INTERVAL: 12 * 60 * 60 * 1000,
 
+  /** 单个候选请求超时：并发执行，不再串行累加 */
+  CHECK_TIMEOUT_MS: 4500,
+
+  /** Releases API 信息更完整，给它一个短暂的优先窗口 */
+  API_PRIORITY_WINDOW_MS: 1200,
+
+  /** 检查成功后的内存缓存有效期，避免反复请求拖慢启动 */
+  CACHE_TTL_MS: 5 * 60 * 1000,
+
+  /** 下载进度停滞多久判定为中断 */
+  DOWNLOAD_STALL_MS: 18000,
+
+  /** 下载最大尝试次数（含换源） */
+  DOWNLOAD_MAX_RETRIES: 4,
+
+  /** 安装包最小合法体积（字节），用于识别代理返回的 HTML 错误页 */
+  MIN_ASSET_BYTES: 64 * 1024,
+
   GITHUB_API_URL: `${GITHUB_API_BASE}/releases/latest`,
 
-  // 多镜像：任一可用即可拿到最新版本号（时间戳绕开 CDN 缓存）
-  GITHUB_RAW_URLS: [
-    `${GITHUB_RAW_BASE}/refs/heads/main/package.json?t=${Date.now()}`,
-    `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
-    `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/raw/refs/heads/main/package.json?t=${Date.now()}`,
-  ],
+  /** 每次调用都重新生成时间戳，真正绕开 CDN 缓存 */
+  getVersionMirrorUrls(): string[] {
+    return VERSION_MIRROR_BUILDERS.map((build) => build());
+  },
+
+  /** 兼容旧调用方：返回一组静态镜像地址 */
+  GITHUB_RAW_URLS: VERSION_MIRROR_BUILDERS.map((build) => build()),
 
   getReleasePageUrl(version: string): string {
     return `${GITHUB_RELEASE_BASE}/tag/v${version}`;
@@ -89,5 +125,12 @@ export const UPDATE_CONFIG = {
     return assetName
       ? `${GITHUB_RELEASE_BASE}/download/v${version}/${assetName}`
       : this.getReleasePageUrl(version);
+  },
+
+  /** 同一个安装包的多个下载地址，供下载失败时换源重试 */
+  getDownloadCandidates(version: string, target: UpdateTarget): string[] {
+    const direct = this.getDownloadUrl(version, target);
+    if (!direct.includes("/releases/download/")) return [direct];
+    return DOWNLOAD_MIRROR_PREFIXES.map((prefix) => `${prefix}${direct}`);
   },
 };

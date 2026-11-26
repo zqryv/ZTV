@@ -18,7 +18,7 @@ interface SidebarItem {
 const sidebarItems: SidebarItem[] = [
   { key: 'home', label: '首页', icon: Home, route: '/', section: 'main' },
   { key: 'live', label: '直播', icon: Tv, route: '/live', section: 'main' },
-  { key: 'music', label: '音乐播放', icon: Music2, route: '/music', section: 'main' },
+  { key: 'music', label: '音乐在线', icon: Music2, route: '/music', section: 'main' },
   { key: 'radio', label: '收音机', icon: Radio, route: '/radio', section: 'main' },
   { key: 'search', label: '搜索', icon: Search, route: '/search', section: 'main' },
   { key: 'favorites', label: '收藏', icon: Heart, route: '/favorites', section: 'user' },

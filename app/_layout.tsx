@@ -32,7 +32,7 @@ export default function RootLayout() {
   const { loadSettings, remoteInputEnabled, apiBaseUrl } = useSettingsStore();
   const { startServer, stopServer } = useRemoteControlStore();
   const { checkLoginStatus } = useAuthStore();
-  const { checkForUpdate, lastCheckTime } = useUpdateStore();
+  const { checkForUpdate, lastCheckTime, initialized } = useUpdateStore();
   const responsiveConfig = useResponsiveLayout();
   const autoCheckedRef = useRef(false);
 
@@ -69,14 +69,14 @@ export default function RootLayout() {
       DeviceUtils.isHarmonyOSAndroid() ||
       (Platform.OS as string) === 'harmony' ||
       (Platform.OS as string) === 'ohos';
-    if (!loaded || !UPDATE_CONFIG.AUTO_CHECK || !canAutoCheck || autoCheckedRef.current) return;
+    if (!loaded || !initialized || !UPDATE_CONFIG.AUTO_CHECK || !canAutoCheck || autoCheckedRef.current) return;
 
     const shouldCheck = Date.now() - lastCheckTime > UPDATE_CONFIG.CHECK_INTERVAL;
     if (shouldCheck) {
       autoCheckedRef.current = true;
       checkForUpdate(true); // 静默检查，不打断用户
     }
-  }, [loaded, lastCheckTime, checkForUpdate]);
+  }, [loaded, initialized, lastCheckTime, checkForUpdate]);
 
   useEffect(() => {
     // 只有在非手机端才启动远程控制服务器

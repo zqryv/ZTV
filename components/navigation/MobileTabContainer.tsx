@@ -16,7 +16,7 @@ interface TabItem {
 const tabs: TabItem[] = [
   { key: 'home', label: '首页', icon: Home, route: '/' },
   { key: 'live', label: '直播', icon: Tv, route: '/live' },
-  { key: 'music', label: '音乐', icon: Music2, route: '/music' },
+  { key: 'music', label: '音乐在线', icon: Music2, route: '/music' },
   { key: 'radio', label: '收音机', icon: Radio, route: '/radio' },
   { key: 'search', label: '搜索', icon: Search, route: '/search' },
   { key: 'favorites', label: '收藏', icon: Heart, route: '/favorites' },

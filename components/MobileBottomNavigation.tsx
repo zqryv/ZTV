@@ -17,7 +17,7 @@ interface NavigationItem {
 const navigationItems: NavigationItem[] = [
   { name: 'home', label: '首页', icon: Home, route: '/' },
   { name: 'live', label: '直播', icon: Tv, route: '/live' },
-  { name: 'music', label: '音乐', icon: Music2, route: '/music' },
+  { name: 'music', label: '音乐在线', icon: Music2, route: '/music' },
   { name: 'radio', label: '收音机', icon: Radio, route: '/radio' },
   { name: 'search', label: '搜索', icon: Search, route: '/search' },
   { name: 'favorites', label: '收藏', icon: Heart, route: '/favorites' },

@@ -31,7 +31,7 @@ export interface Category {
 
 /**
  * 入口型分类：不加载点播内容，点击后跳转到对应的功能页。
- * 包含直播（电视 / 音乐台）、音乐播放、收音机。
+ * 包含直播（电视 / 音乐台）、音乐在线、收音机。
  */
 export const isEntryCategory = (category: Category | null | undefined): boolean =>
   !!category && ["live", "radio", "music"].includes(category.type ?? "");
@@ -64,10 +64,10 @@ const initialCategories: Category[] = [
   { title: "综艺", type: "tv", tag: "综艺" },
   { title: "豆瓣 Top250", type: "movie", tag: "top250" },
   // 功能入口分类：点击直接进入对应页面，不参与点播内容加载。
-  // 顺序：电视 → 音乐台 → 音乐播放 → 收音机（与用户视觉顺序一致）。
+  // 顺序：电视 → 音乐台 → 音乐在线 → 收音机（与用户视觉顺序一致）。
   { title: "电视", type: "live", slot: "tv" },
   { title: "音乐台", type: "live", slot: "mtv" },
-  { title: "音乐播放", type: "music" },
+  { title: "音乐在线", type: "music" },
   { title: "收音机", type: "radio" },
 ];
 

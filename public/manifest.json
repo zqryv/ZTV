@@ -1,7 +1,7 @@
 {
   "name": "ZTV 全端影音",
   "short_name": "ZTV",
-  "description": "ZTV 视频直播、音乐播放与网络收音机，支持手机、折叠屏、平板、电视与鸿蒙设备",
+  "description": "ZTV 视频直播、音乐在线与网络收音机，支持手机、折叠屏、平板、电视与鸿蒙设备",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",
