@@ -1,0 +1,78 @@
+name: Deploy ZTV Web to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'constants/**'
+      - 'hooks/**'
+      - 'utils/**'
+      - 'public/**'
+      - 'services/**'
+      - 'stores/**'
+      - 'app.json'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'scripts/preparePages.js'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile --network-timeout 600000
+
+      - name: Set Pages base url
+        # 只在 Pages 构建时临时注入，仓库文件保持无前缀，
+        # 这样 release.yml 产出的鸿蒙离线 PWA zip 仍可用 file:// 直接打开
+        run: |
+          node -e "const fs=require('fs');const p='app.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.expo.experiments=j.expo.experiments||{};j.expo.experiments.baseUrl='/ZTV';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+
+      - name: Export Web (static)
+        env:
+          CI: '1'
+        run: npx expo export --platform web --output-dir web-build
+
+      - name: Prepare Pages artifact
+        run: node scripts/preparePages.js web-build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web-build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
