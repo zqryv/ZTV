@@ -47,6 +47,7 @@ import {
   Disc3,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
+import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { StyledButton } from "@/components/StyledButton";
@@ -86,9 +87,11 @@ export default function MusicScreen() {
   const { spacing } = responsiveConfig;
   const metrics = useCompactLayout();
   const { isWide, isTVLike } = metrics;
+  const router = useRouter();
+  // 按扣除侧栏 / 顶栏后的真实可用宽度推导右栏，避免 Web 大屏被 200px 侧栏挤压
   const rightWidth = isWide
-    ? Math.max(240, Math.round(metrics.width - spacing * 2 - metrics.leftWidth - metrics.gap * 1.5))
-    : Math.max(240, Math.round(metrics.width - spacing * 2));
+    ? Math.max(240, Math.round(metrics.contentWidth - metrics.leftWidth - metrics.gap * 1.5))
+    : Math.max(240, metrics.contentWidth);
   const gridColumns = isWide ? Math.min(3, metrics.columns) : 1;
 
   const {
@@ -339,30 +342,30 @@ export default function MusicScreen() {
     searchRef.current?.focus();
   }, []);
 
-  // TV 遥控器：屏幕键盘打开时让焦点系统接管，避免按键被误判为切歌
+  /**
+   * 大屏遥控器 / 键盘：方向键与 OK 统一交给原生 / DOM 焦点引擎，
+   * 只保留媒体播放键与返回键，避免全局事件与 onPress 双重消费
+   * （旧实现 up/down 改 focusIndex、select 直接 toggle，导致「按钮无法选中或操作」）。
+   */
   const handleTVEvent = useCallback(
     (event: any) => {
-      if (keyboardVisible) return;
-      switch (event.eventType) {
-        case "left":
-          void handlePrev();
-          break;
-        case "right":
-          void handleNext();
-          break;
-        case "select":
-        case "playPause":
-          void audioPlayer.toggle();
-          break;
-        case "up":
-          setFocusIndex((i) => Math.max(0, i - 1));
-          break;
-        case "down":
-          setFocusIndex((i) => Math.min(displayTracks.length - 1, i + 1));
-          break;
+      const type = event?.eventType;
+      if (type === "back") {
+        if (addModalVisible) {
+          setAddModalVisible(false);
+          return;
+        }
+        if (keyboardVisible) {
+          setKeyboardVisible(false);
+          return;
+        }
+        router.back();
+        return;
       }
+      if (keyboardVisible || addModalVisible) return;
+      if (type === "playPause") void audioPlayer.toggle();
     },
-    [keyboardVisible, handlePrev, handleNext, displayTracks.length]
+    [keyboardVisible, addModalVisible, router]
   );
   useSafeTVEventHandler(handleTVEvent);
 
@@ -431,6 +434,9 @@ export default function MusicScreen() {
             isTVLike && focusIndex === index && dyn.gridCardFocused,
           ]}
           onPress={() => void startTrack(item.id)}
+          onFocus={() => setFocusIndex(index)}
+          hasTVPreferredFocus={isTVLike && index === 0}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
           activeOpacity={0.75}
         >
           {artwork}
@@ -455,6 +461,9 @@ export default function MusicScreen() {
           isTVLike && focusIndex === index && dyn.trackRowFocused,
         ]}
         onPress={() => void startTrack(item.id)}
+        onFocus={() => setFocusIndex(index)}
+        hasTVPreferredFocus={isTVLike && index === 0}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         activeOpacity={0.7}
       >
         {artwork}
@@ -900,7 +909,15 @@ export default function MusicScreen() {
       {pageHeader}
       {searchRow}
       <View style={[dyn.columns, isWide && dyn.columnsWide]}>
-        <View style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}>{hero}</View>
+        <ScrollView
+          style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}
+          contentContainerStyle={dyn.leftColumnContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
+        >
+          {hero}
+        </ScrollView>
         {rightColumn}
       </View>
       {modal}
@@ -919,7 +936,7 @@ export default function MusicScreen() {
 const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
   StyleSheet.create({
     container: {
-      flex: 1, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
+      flex: 1, minHeight: 0, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
       paddingHorizontal: spacing, paddingBottom: spacing / 2,
     },
     pageHeader: {
@@ -929,14 +946,18 @@ const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
     pageTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
     pageTitleText: { flexShrink: 1 },
     badge: {
-      width: m.headerHeight - 4, height: m.headerHeight - 4, borderRadius: m.radiusSm - 2,
+      width: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
+      height: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
+      borderRadius: m.radiusSm - 2,
       alignItems: "center", justifyContent: "center",
     },
     pageTitle: { fontSize: m.pageTitle, fontWeight: "bold" },
     pageSubtitle: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
     headerActions: { flexDirection: "row", alignItems: "center", gap: 6 },
     roundButton: {
-      width: m.headerHeight - 4, height: m.headerHeight - 4, borderRadius: (m.headerHeight - 4) / 2,
+      width: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
+      height: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
+      borderRadius: m.headerHeight,
       alignItems: "center", justifyContent: "center",
       backgroundColor: Colors.surface.overlay, borderWidth: 1, borderColor: Colors.surface.border,
     },
@@ -947,18 +968,25 @@ const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
     searchBox: {
       flex: 1, minWidth: 110, flexDirection: "row", alignItems: "center", gap: 6,
       backgroundColor: Colors.surface.overlay, borderWidth: 1, borderColor: Colors.surface.border,
-      borderRadius: 18, paddingHorizontal: 10, height: m.headerHeight - 4,
+      borderRadius: 18, paddingHorizontal: 10,
+      height: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
     },
     searchInput: { flex: 1, height: "100%", minHeight: 32, color: Colors.text.primary, fontSize: m.body, paddingVertical: 0 },
     searchClear: { padding: 3 },
-    smallButton: { borderRadius: 18, paddingHorizontal: 12, height: m.headerHeight - 4, justifyContent: "center" },
+    smallButton: {
+      borderRadius: 18, paddingHorizontal: 12,
+      height: Math.max(Math.round(m.minTouchTarget * 0.8), m.headerHeight - 4),
+      justifyContent: "center",
+    },
 
     /* 分栏 */
     columns: { flex: 1, flexDirection: "column", minHeight: 0 },
     columnsWide: { flexDirection: "row", gap: m.gap * 1.5 },
-    leftColumn: { flexShrink: 0 },
-    leftColumnWide: { width: m.leftWidth, flexShrink: 0 },
-    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, marginTop: m.gap },
+    /** 左栏独立滚动兜底：低高度投影 / 4K 缩放时内容仍可完整到达 */
+    leftColumn: { flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnWide: { width: m.leftWidth, flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnContent: { flexGrow: 1, paddingBottom: m.gap },
+    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, maxHeight: m.contentHeight, marginTop: m.gap },
     rightColumnWide: { flex: 1, marginTop: 0 },
 
     /* 正在播放卡 */
@@ -1023,7 +1051,7 @@ const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
     },
     toolButton: {
       flex: 1, alignItems: "center", justifyContent: "center", gap: 2,
-      minHeight: m.roundControl, borderRadius: m.radiusSm,
+      minHeight: Math.max(m.minTouchTarget, m.roundControl), borderRadius: m.radiusSm,
       backgroundColor: "rgba(255,255,255,0.06)", borderWidth: 1, borderColor: Colors.surface.border,
     },
     toolButtonActive: { backgroundColor: "rgba(0,230,168,0.12)", borderColor: "rgba(0,230,168,0.45)" },
@@ -1053,7 +1081,10 @@ const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
     fieldLabelRow: { flexDirection: "row", alignItems: "center", gap: 5 },
     fieldLabel: { fontSize: m.caption, color: Colors.text.tertiary, marginBottom: 5 },
     filterBar: { marginBottom: m.gapSm, flexGrow: 0 },
-    pill: { borderRadius: 16, paddingHorizontal: 11, paddingVertical: 5, marginRight: 6 },
+    pill: {
+      borderRadius: 16, paddingHorizontal: 11, paddingVertical: 5, marginRight: 6,
+      minHeight: Math.round(m.minTouchTarget * 0.6), justifyContent: "center",
+    },
     pillText: { fontSize: m.caption + 1 },
     errorBanner: {
       flexDirection: "row", alignItems: "center", gap: 6, padding: 8, marginBottom: m.gapSm,
@@ -1086,7 +1117,8 @@ const createStyles = (m: CompactMetrics, spacing: number, rightWidth: number) =>
     gridDelete: { position: "absolute", top: m.gapSm + 2, right: m.gapSm + 2, padding: 3 },
     trackRow: {
       flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 7,
-      borderRadius: m.radiusSm - 2, marginBottom: 3, minHeight: 44,
+      borderRadius: m.radiusSm - 2, marginBottom: 3,
+      minHeight: Math.max(44, Math.round(m.minTouchTarget * 0.9)),
     },
     trackRowActive: { backgroundColor: "rgba(0,230,168,0.12)" },
     trackRowFocused: { borderWidth: 2, borderColor: Colors.brand.accent },

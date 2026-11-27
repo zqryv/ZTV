@@ -10,7 +10,7 @@
  * 功能与数据接口全部沿用：远程输入、拼音首字母检索、71 条热搜、
  * TOP10 宫格、A–Z 索引、搜索结果、TV 遥控器。
  */
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   TextInput,
@@ -42,6 +42,7 @@ import { useRouter } from "expo-router";
 import { Colors } from "@/constants/Colors";
 import CustomScrollView from "@/components/CustomScrollView";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
+import { useSafeTVEventHandler } from "@/hooks/useSafeTVEventHandler";
 import { useCompactLayout, CompactMetrics } from "@/utils/DesignTokens";
 import { getCommonResponsiveStyles } from "@/utils/ResponsiveStyles";
 import ResponsiveNavigation from "@/components/navigation/ResponsiveNavigation";
@@ -82,6 +83,17 @@ export default function SearchScreen() {
     isHarmonyOS,
   } = responsiveConfig;
   const { isWide, isTVLike } = metrics;
+
+  /** 大屏遥控器 / 键盘：返回键先收起屏幕键盘，再退回上一页（不抢占焦点导航） */
+  const handleTVEvent = useCallback((event: any) => {
+    if (event?.eventType !== "back") return;
+    if (showKeyboard) {
+      setShowKeyboard(false);
+      return;
+    }
+    router.back();
+  }, [showKeyboard, router]);
+  useSafeTVEventHandler(handleTVEvent);
 
   useEffect(() => {
     if (lastMessage && targetPage === "search") {
@@ -277,7 +289,13 @@ export default function SearchScreen() {
   ) : null;
 
   const leftColumn = (
-    <View style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}>
+    <ScrollView
+      style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}
+      contentContainerStyle={dyn.leftColumnContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       {searchRow}
       <View style={dyn.metaRow}>
         <ThemedText style={dyn.formText} numberOfLines={1}>
@@ -300,7 +318,7 @@ export default function SearchScreen() {
           ))}
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 
   // ── 右栏：热搜 TOP5 + 结果 / 完整榜单 + 猜你想搜 ───────────────────────
@@ -475,6 +493,7 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
   return StyleSheet.create({
     container: {
       flex: 1,
+      minHeight: 0,
       paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
       paddingHorizontal: spacing,
       paddingBottom: spacing / 2,
@@ -494,9 +513,11 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
 
     columns: { flex: 1, flexDirection: "column", minHeight: 0 },
     columnsWide: { flexDirection: "row", gap: m.gap * 1.5 },
-    leftColumn: { flexShrink: 0 },
-    leftColumnWide: { width: m.leftWidth, flexShrink: 0 },
-    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, marginTop: m.gap },
+    /** 左栏独立滚动兜底：Web 的 body{overflow:hidden} 下也不会裁掉内容 */
+    leftColumn: { flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnWide: { width: m.leftWidth, flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnContent: { flexGrow: 1, paddingBottom: m.gap },
+    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, maxHeight: m.contentHeight, marginTop: m.gap },
     rightColumnWide: { flex: 1, marginTop: 0 },
 
     searchContainer: {
@@ -508,9 +529,16 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
       paddingHorizontal: 10, gap: 6,
     },
     input: { flex: 1, color: "white", fontSize: m.body, height: "100%" },
-    clearBtn: { padding: 4 },
+    clearBtn: {
+      padding: 4,
+      minWidth: Math.round(m.minTouchTarget * 0.7),
+      minHeight: Math.round(m.minTouchTarget * 0.7),
+      alignItems: "center",
+      justifyContent: "center",
+    },
     iconSquare: {
-      width: Math.max(36, m.headerHeight), height: Math.max(36, m.headerHeight),
+      width: Math.max(m.minTouchTarget, m.headerHeight),
+      height: Math.max(m.minTouchTarget, m.headerHeight),
       justifyContent: "center", alignItems: "center", borderRadius: m.radiusSm,
       backgroundColor: Colors.brand.accent,
     },
@@ -558,7 +586,9 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
     scrollContent: { paddingBottom: m.gap },
     letterRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginBottom: m.gapSm },
     letterChip: {
-      minWidth: m.isTVLike ? 32 : 24, height: m.isTVLike ? 30 : 24, paddingHorizontal: 5,
+      minWidth: m.isTVLike ? 32 : 24,
+      height: Math.max(m.isTVLike ? 30 : 24, Math.round(m.minTouchTarget * 0.65)),
+      paddingHorizontal: 5,
       borderRadius: m.radiusSm - 2, alignItems: "center", justifyContent: "center",
       backgroundColor: Colors.surface.raised, borderWidth: 1, borderColor: Colors.surface.border,
     },
@@ -570,6 +600,7 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
     hotList: { flexDirection: m.isWide ? "row" : "column", flexWrap: m.isWide ? "wrap" : "nowrap", gap: m.gapSm },
     hotItem: {
       width: m.isWide ? "49%" : "100%", flexDirection: "row", alignItems: "center",
+      minHeight: Math.round(m.minTouchTarget * 0.8),
       paddingVertical: m.gapSm, paddingHorizontal: 10, borderRadius: m.radiusSm,
       backgroundColor: Colors.surface.raised, borderWidth: 1, borderColor: Colors.surface.border, gap: 8,
     },
@@ -591,6 +622,8 @@ const createStyles = (m: CompactMetrics, spacing: number) => {
     guessTitle: { fontSize: m.body + 1, fontWeight: "700", marginBottom: m.gapSm },
     guessRow: { flexDirection: "row", flexWrap: "wrap", gap: m.gapSm },
     guessChip: {
+      minHeight: Math.round(m.minTouchTarget * 0.7),
+      justifyContent: "center",
       paddingHorizontal: 12, paddingVertical: 6, borderRadius: 18,
       backgroundColor: Colors.surface.raised, borderWidth: 1, borderColor: Colors.surface.border,
     },

@@ -39,6 +39,7 @@ import {
   ListMusic,
 } from "lucide-react-native";
 import Toast from "react-native-toast-message";
+import { useRouter } from "expo-router";
 import { ThemedView } from "@/components/ThemedView";
 import { ThemedText } from "@/components/ThemedText";
 import { StyledButton } from "@/components/StyledButton";
@@ -76,6 +77,7 @@ export default function RadioScreen() {
   const { spacing } = responsiveConfig;
   const metrics = useCompactLayout();
   const { isWide, isTVLike } = metrics;
+  const router = useRouter();
 
   const {
     stations,
@@ -189,30 +191,26 @@ export default function RadioScreen() {
     [filtered, currentStationId, startStation]
   );
 
+  /**
+   * 大屏遥控器 / 键盘：方向键与 OK 由原生 / DOM 焦点引擎统一处理，
+   * 旧实现 select 会按「假焦点」focusIndex 播放另一台、并与 onPress 叠加，
+   * 是「按钮无法选中或操作」的直接原因。这里只保留媒体键与返回键。
+   */
   const handleTVEvent = useCallback(
     (event: any) => {
-      switch (event.eventType) {
-        case "left":
-          stepStation(-1);
-          break;
-        case "right":
-          stepStation(1);
-          break;
-        case "up":
-          setFocusIndex((i) => Math.max(0, i - 1));
-          break;
-        case "down":
-          setFocusIndex((i) => Math.min(filtered.length - 1, i + 1));
-          break;
-        case "select":
-          if (filtered[focusIndex]) void startStation(filtered[focusIndex].id);
-          break;
-        case "playPause":
-          void audioPlayer.toggle();
-          break;
+      const type = event?.eventType;
+      if (type === "back") {
+        if (addModalVisible) {
+          setAddModalVisible(false);
+          return;
+        }
+        router.back();
+        return;
       }
+      if (addModalVisible) return;
+      if (type === "playPause") void audioPlayer.toggle();
     },
-    [stepStation, filtered, focusIndex, startStation]
+    [addModalVisible, router]
   );
   useSafeTVEventHandler(handleTVEvent);
 
@@ -285,6 +283,9 @@ export default function RadioScreen() {
           deviceTypeTV(metrics) && focusIndex === index && dyn.stationCardFocused,
         ]}
         onPress={() => void startStation(item.id)}
+        onFocus={() => setFocusIndex(index)}
+        hasTVPreferredFocus={isTVLike && index === 0}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         activeOpacity={0.75}
       >
         <LinearGradient
@@ -483,12 +484,18 @@ export default function RadioScreen() {
   ) : null;
 
   const leftColumn = (
-    <View style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}>
+    <ScrollView
+      style={[dyn.leftColumn, isWide && dyn.leftColumnWide]}
+      contentContainerStyle={dyn.leftColumnContent}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
+    >
       {heroCard}
       {categoryBar}
       {filterPanel}
       {errorLine}
-    </View>
+    </ScrollView>
   );
 
   // ── 右栏：探索电台 + 完整列表 ───────────────────────────────────────────
@@ -590,7 +597,7 @@ const deviceTypeTV = (m: CompactMetrics) => m.isTVLike;
 const createStyles = (m: CompactMetrics, spacing: number) =>
   StyleSheet.create({
     container: {
-      flex: 1, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
+      flex: 1, minHeight: 0, paddingTop: m.isTVLike ? Math.min(24, spacing * 1.5) : 0,
       paddingHorizontal: spacing, paddingBottom: spacing / 2,
     },
     pageHeader: {
@@ -601,15 +608,19 @@ const createStyles = (m: CompactMetrics, spacing: number) =>
     pageTitle: { fontSize: m.pageTitle, fontWeight: "bold" },
     pageSubtitle: { fontSize: m.caption, color: Colors.text.tertiary, marginTop: 2 },
     addRound: {
-      width: m.headerHeight, height: m.headerHeight, borderRadius: m.headerHeight / 2,
+      width: Math.max(m.minTouchTarget, m.headerHeight),
+      height: Math.max(m.minTouchTarget, m.headerHeight),
+      borderRadius: m.headerHeight,
       backgroundColor: Colors.brand.accent, alignItems: "center", justifyContent: "center",
     },
 
     columns: { flex: 1, flexDirection: "column", minHeight: 0 },
     columnsWide: { flexDirection: "row", gap: m.gap * 1.5 },
-    leftColumn: { flexShrink: 0 },
-    leftColumnWide: { width: m.leftWidth, flexShrink: 0 },
-    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, marginTop: m.gap },
+    /** 左栏独立滚动兜底：Web 的 body{overflow:hidden} 下也不会裁掉内容 */
+    leftColumn: { flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnWide: { width: m.leftWidth, flexShrink: 0, maxHeight: m.contentHeight },
+    leftColumnContent: { flexGrow: 1, paddingBottom: m.gap },
+    rightColumn: { flex: 1, minWidth: 0, minHeight: 0, maxHeight: m.contentHeight, marginTop: m.gap },
     rightColumnWide: { flex: 1, marginTop: 0 },
 
     /* 调谐器焦点卡：按左栏宽度收紧 */
@@ -648,8 +659,14 @@ const createStyles = (m: CompactMetrics, spacing: number) =>
 
     /* 分类胶囊 / 折叠筛选 */
     categoryBar: { marginBottom: m.gapSm, flexGrow: 0 },
-    pill: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, marginRight: 6 },
-    pillMore: { borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, flexDirection: "row", gap: 4 },
+    pill: {
+      borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, marginRight: 6,
+      minHeight: Math.round(m.minTouchTarget * 0.6), justifyContent: "center",
+    },
+    pillMore: {
+      borderRadius: 18, paddingHorizontal: 12, paddingVertical: 5, flexDirection: "row", gap: 4,
+      minHeight: Math.round(m.minTouchTarget * 0.6), alignItems: "center",
+    },
     pillText: { fontSize: m.caption + 1 },
     filterPanel: {
       borderRadius: m.radiusSm, borderWidth: 1, borderColor: Colors.surface.border,
@@ -663,7 +680,11 @@ const createStyles = (m: CompactMetrics, spacing: number) =>
     onlineHint: { fontSize: m.caption, color: Colors.text.tertiary, flex: 1 },
     onlineErrorText: { color: "#FFB86B", fontSize: m.caption + 1, marginBottom: 6 },
     volumeRow: { flexDirection: "row", alignItems: "center", gap: 4, flexWrap: "wrap" },
-    volumeChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, backgroundColor: Colors.surface.overlay },
+    volumeChip: {
+      paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+      minHeight: Math.round(m.minTouchTarget * 0.6), justifyContent: "center",
+      backgroundColor: Colors.surface.overlay,
+    },
     volumeChipActive: { backgroundColor: "rgba(0,230,168,0.2)", borderWidth: 1, borderColor: Colors.brand.accent },
     volumeText: { fontSize: m.caption },
     errorText: { color: "#ff6b6b", fontSize: m.caption + 1, textAlign: "center", marginBottom: 6 },

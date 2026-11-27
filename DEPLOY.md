@@ -1,88 +1,81 @@
-# ZTV 部署与发布指南
+# ZTV 部署与发布指南（v2.4.0）
 
-代码已全部完成并在本地 `master` 分支提交（commit `dfce9b4`），但**推送到 GitHub 需要你的 GitHub 账号授权**——当前环境没有配置任何 GitHub 凭据，因此这一步需你来完成。
+## 1. 仓库与分支
 
-## 1. 推送代码到 GitHub
+- 仓库：`https://github.com/zqryv/ZTV`，主分支 `main`。
+- 应用内「检查更新」读取 `constants/UpdateConfig.ts` 的 `GITHUB_OWNER` / `GITHUB_REPO`（当前为 `zqryv/ZTV`），优先请求 GitHub Releases API，失败时并发竞速回退 raw / jsDelivr 镜像。
+- 提交 `main` 且 `package.json` 变更时，`.github/workflows/auto-tag.yml` 自动创建 `v{version}` 标签。该标签由 `GITHUB_TOKEN` 创建，不会级联触发发版工作流，因此需要用有 `repo` 权限的 PAT 手动 `workflow_dispatch` 触发 `release.yml`。
 
-当前本地仓库已配置一个占位远端，**请先改成你自己的仓库地址**：
+## 2. 发布流程
 
 ```bash
 cd ZTV
-# 改成你自己的 GitHub 用户名 / 仓库名
-git remote set-url origin https://github.com/<你的用户名>/ZTV.git
+git add -A && git commit -m "feat: v2.4.0 大屏适配"
+git push origin main
 
-# 推送（会提示输入用户名 + Personal Access Token）
-git push -u origin master
+# 手动触发全平台 Release（auto-tag 已自动建好 tag）
+curl -X POST \
+  -H "Authorization: Bearer <PAT>" \
+  -H "Accept: application/vnd.github+json" \
+  https://api.github.com/repos/zqryv/ZTV/actions/workflows/release.yml/dispatches \
+  -d '{"ref":"main"}'
 ```
 
-> 若使用 HTTPS，密码处需填 GitHub **Personal Access Token**（需要 `repo` 权限），而非账号密码。
-> 也可以换用 SSH：`git remote set-url origin git@github.com:<你的用户名>/ZTV.git`
+在 **Actions** 页查看 `ZTV Release (all platforms)`；全部 job 成功后，**Releases** 页自动发布 `v2.4.0`。
 
-## 2. 修改更新地址
-
-推送前，把 `constants/UpdateConfig.ts` 顶部的两个常量改成你的仓库：
-
-```ts
-const GITHUB_OWNER = "<你的用户名>";
-const GITHUB_REPO = "ZTV";
-```
-
-应用的「检查更新」会从该仓库的 `main`/`master` 分支读取 `package.json` 版本号，并从对应 Release 下载安装包。
-
-> 注意：本地分支是 `master`，而 UpdateConfig 默认读 `refs/heads/main`。二选一：把分支改名为 `main`（`git branch -M main`），或把 UpdateConfig 里的 `main` 改成 `master`。
-
-## 3. 自动构建四个平台的安装包
-
-仓库已内置两个 GitHub Actions 工作流（在 `.github/workflows/`）：
-
-- `build-apk.yml`：手动触发（`workflow_dispatch`），构建 Android TV APK。
-- `release.yml`：推送 `v*` 标签或手动触发，一次性构建 **Android TV / Android / Windows / Ubuntu** 四个平台的安装包，并自动创建 GitHub Release 上传全部资源。
-
-发布流程：
-
-```bash
-# 版本号与 package.json 保持一致（当前 2.3.0）
-git tag v2.3.0
-git push origin v2.3.0
-```
-
-在仓库的 **Actions** 页签可看到构建进度；结束后在 **Releases** 页可下载：
+## 3. Release 产物（7 个）
 
 | 平台 | 资源文件 |
 | --- | --- |
-| Android TV | `ZTV-v2.3.0-android-tv.apk` |
-| Android 手机/平板 / 鸿蒙 4.x | `ZTV-v2.3.0-android.apk` |
-| 鸿蒙 NEXT（PWA） | `ZTV-v2.3.0-harmony-web.zip` |
-| Windows | `ZTV-v2.3.0-windows-setup.exe` |
-| Ubuntu | `ZTV-v2.3.0-linux-amd64.deb` |
-| macOS | `ZTV-v2.3.0-macos-universal.dmg` |
-| iOS | `ZTV-v2.3.0-ios-xcode-project.zip` |
+| Android TV | `ZTV-v2.4.0-android-tv.apk` |
+| Android 手机/平板 / 鸿蒙 4.x | `ZTV-v2.4.0-android.apk` |
+| 鸿蒙 NEXT（离线 PWA） | `ZTV-v2.4.0-harmony-web.zip` |
+| Windows | `ZTV-v2.4.0-windows-setup.exe` |
+| Ubuntu | `ZTV-v2.4.0-linux-amd64.deb` |
+| macOS | `ZTV-v2.4.0-macos-universal.dmg` |
+| iOS（iPhone / iPad） | `ZTV-v2.4.0-ios-xcode-project.zip` |
 
-## 4. 各平台安装方式
+> 签名 IPA 为可选 job，需配置 `EXPO_TOKEN` 与 `ENABLE_IOS_EAS`，默认跳过。
 
-- **Android TV（联想/乐视等 1.x+）**：U 盘拷贝 APK 到电视安装，或用 `adb install -r ZTV-v2.3.0-android-tv.apk`；安装后在「应用」里将 ZTV 设为启动器可开机自启。Leanback 启动项与横幅已保留。
+## 4. GitHub Pages 网站
+
+- **访问地址**：https://zqryv.github.io/ZTV/
+- 工作流：`.github/workflows/pages.yml`，`push main` 或手动 `workflow_dispatch` 触发。
+- 构建步骤：`yarn install --frozen-lockfile` → 临时给 `app.json` 注入 `expo.experiments.baseUrl = "/ZTV"` → `npx expo export --platform web` → `node scripts/preparePages.js web-build` → `actions/deploy-pages@v4`。
+- `preparePages.js` 负责：把资源绝对路径改写为 `/ZTV/...`、生成 `404.html` 作为 SPA 深链回退、生成 `.nojekyll` 保留 `_expo` 资源目录、把 PWA manifest 改为相对路径。
+- 仓库中的 `app.json` **不含** baseUrl，因此 `release.yml` 产出的鸿蒙离线 PWA zip 仍可用 `file://` 直接打开，不受 Pages 子路径影响。
+- 首次使用需在仓库 **Settings → Pages** 把 Source 设为 **GitHub Actions**（也可通过 `POST /repos/zqryv/ZTV/pages` 的 `{"build_type":"workflow"}` 启用）。
+- 站点支持直接访问 `/ZTV/`、`/ZTV/search`、`/ZTV/music`、`/ZTV/radio`，刷新深链由 `404.html` 承接。
+
+## 5. 各平台安装方式
+
+- **Android TV**：U 盘拷贝 APK 安装，或 `adb install -r ZTV-v2.4.0-android-tv.apk`。
 - **Android 手机/平板 / 鸿蒙 4.x**：直接安装 APK，允许「未知来源」。
-- **鸿蒙 NEXT**：解压 `ZTV-v2.3.0-harmony-web.zip`，用浏览器打开 `index.html`，通过菜单「添加到桌面」全屏使用。
-- **Windows**：双击 `ZTV-v2.3.0-windows-setup.exe` 安装。
-- **Ubuntu**：`sudo apt install ./ZTV-v2.3.0-linux-amd64.deb`。
-- **macOS**：双击 `.dmg` 拖入应用程序；首次打开右键选择「打开」。
-- **iOS**：解压 Xcode 工程 zip，用个人 Apple ID 免费签名安装真机。
+- **鸿蒙 NEXT**：解压 `ZTV-v2.4.0-harmony-web.zip`，浏览器打开 `index.html` →「添加到桌面」；或直接访问上面的 Pages 网址。
+- **Windows / Ubuntu / macOS**：双击安装包 / `sudo apt install ./ZTV-v2.4.0-linux-amd64.deb`。
+- **电视 / 投影仪浏览器**：打开 Pages 网址，方向键移动焦点、Enter/OK 确认、Escape 返回；媒体键可播放/暂停。
 
-> Windows / Ubuntu 安装包由 `desktop/` 下的 Electron 外壳封装 react-native-web 导出物生成。受原生模块限制，桌面版的视频解码能力弱于 Android TV 版，主要用于大屏浏览与设置体验。
+> Windows / Ubuntu / macOS 安装包由 `desktop/` 下的 Electron 外壳封装 Web 导出物生成，视频解码能力弱于 Android TV 版，主要用于大屏浏览与设置体验。
 
-## 5. 本地构建（可选）
-
-本地打包 Android TV 需要 **JDK 17 + Android SDK**（当前构建环境未安装 Java，故未在本地产出 APK）：
+## 6. 本地验证
 
 ```bash
-yarn install
-yarn build          # EXPO_TV=1 prebuild + gradle assembleRelease
-# 产物：android/app/build/outputs/apk/release/app-release.apk
+cd ZTV
+yarn typecheck                       # tsc --noEmit
+npx jest --ci --runInBand            # 单元 / 快照测试
+node scripts/verifyRefactor.js       # 既有重构不变式
+node scripts/verifyLargeScreenMatrix.js  # 大屏分辨率矩阵（8 分辨率 × 3 平台）
+node scripts/verifyAudioSources.js  # 音源真实可用性
+npx expo export --platform web      # Web/PWA 静态导出
 ```
 
-## 验证结果
+## 7. v2.4.0 验证结果
 
-- TypeScript 语法检查：全部改动文件通过。
-- 完整类型检查：应用代码 **0 错误**；仅 `utils/__tests__/` 下原项目自带的 3 类测试类型报错（与本次改动无关）。
-- JSON 配置（`app.json` / `package.json` / `eas.json` / `desktop/package.json`）：全部有效。
-- 本地 Git：已初始化、已提交、工作区干净。
+- `tsc --noEmit`：**0 错误**。
+- Jest：**6 suites / 90 tests / 1 snapshot 全通过**（新增 `utils/__tests__/LargeScreen.test.ts`；`ThemedText` 快照已按关闭字体缩放更新）。
+- `verifyRefactor.js`：**51/51**（含三处版本号统一 2.4.0）。
+- `verifyLargeScreenMatrix.js`：**248/248**，覆盖 1024×768 / 1280×720 / 1280×800 / 1366×768 / 1920×1080 / 1920×1200 / 2560×1440 / 3840×2160 共 8 种分辨率 × Web 投屏 / 原生电视 / 机顶盒 3 类平台。
+- `verifyAudioSources.js`：**18/18**。
+- Web 静态导出：成功，`EXPO_BASE_URL` / `experiments.baseUrl` 注入、资源路径改写、`404.html`、`.nojekyll`、相对 manifest 均已实测。
+- 多视口 headless 浏览器渲染：1920×1080 / 1280×720 / 1024×768 / 3840×2160 下三屏完整显示、无裁剪。
+- 完整修改说明见 `docs/LARGE_SCREEN_ADAPTATION.md`。

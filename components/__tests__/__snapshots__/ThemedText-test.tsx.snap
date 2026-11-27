@@ -2,6 +2,8 @@
 
 exports[`renders correctly 1`] = `
 <Text
+  allowFontScaling={false}
+  maxFontSizeMultiplier={1}
   style={
     [
       {

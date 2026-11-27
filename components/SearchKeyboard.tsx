@@ -18,7 +18,7 @@ import {
 import { X } from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
-import { useCompactLayout } from "@/utils/DesignTokens";
+import { useCompactLayout, getKeyboardActionWidths } from "@/utils/DesignTokens";
 import { Colors } from "@/constants/Colors";
 
 const LETTER_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
@@ -67,9 +67,10 @@ function KeyButton({
     <TouchableOpacity
       activeOpacity={0.65}
       hasTVPreferredFocus={preferred}
+      hitSlop={{ top: 6, bottom: 6, left: 3, right: 3 }}
       style={[
         styles.key,
-        { width, height },
+        { width, height, minWidth: 0, flexShrink: 1 },
         accent && styles.keyAccent,
         highlighted && styles.keyHighlighted,
       ]}
@@ -107,15 +108,20 @@ export function SearchKeyboard({
   const metrics = useCompactLayout();
   if (!visible) return null;
 
-  const isTV = deviceForm === "tv" || deviceForm === "setTopBox";
+  const isTV = metrics.isTVLike;
   const gap = metrics.gapSm;
   const padding = isTV ? metrics.cardPadding : Math.max(10, metrics.cardPadding - 4);
-  const maxKeyWidth = isTV ? 64 : deviceForm === "phone" ? 34 : 48;
+  const maxKeyWidth = isTV
+    ? Math.round(64 * Math.min(1.35, metrics.resolutionScale))
+    : deviceForm === "phone" ? 34 : 48;
   // 关键：分栏时按面板宽度计算，键盘不再占满整屏
   const baseWidth = panelWidth && panelWidth > 0 ? panelWidth : screenWidth - spacing * 2;
-  const available = Math.max(190, baseWidth - padding * 2);
-  const letterKeyWidth = Math.min(maxKeyWidth, (available - gap * 9) / 10);
-  const keyHeight = metrics.keyHeight;
+  const available = Math.max(190, Math.round(baseWidth - padding * 2));
+  const letterKeyWidth = Math.max(18, Math.min(maxKeyWidth, (available - gap * 9) / 10));
+  // 大屏按键至少接近 10-foot 最小可聚焦区域，同时不超过左栏可用高度
+  const keyHeight = Math.max(metrics.keyHeight, Math.min(metrics.minTouchTarget, 48));
+  /** 功能行按 available 做权重分配：任何分辨率下总宽都不超过面板，不再被 nowrap 裁掉 */
+  const actionWidths = getKeyboardActionWidths(available, gap);
   const rows = numeric ? NUMBER_ROWS : LETTER_ROWS;
   const keyFont = metrics.body;
   const highlight = (key: string) => {
@@ -123,7 +129,16 @@ export function SearchKeyboard({
   };
 
   return (
-    <View style={[styles.container, { padding, borderRadius: metrics.radius }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          padding,
+          borderRadius: metrics.radius,
+          maxWidth: panelWidth ? Math.round(panelWidth) : undefined,
+        },
+      ]}
+    >
       <View style={[styles.header, { marginBottom: gap + 2 }]}>
         <View style={styles.headerTitle}>
           <ThemedText style={[styles.title, { fontSize: metrics.body }]}>{title}</ThemedText>
@@ -131,7 +146,18 @@ export function SearchKeyboard({
             {hint}
           </ThemedText>
         </View>
-        <TouchableOpacity onPress={onClose} style={styles.closeButton} accessibilityLabel="收起键盘">
+        <TouchableOpacity
+          onPress={onClose}
+          style={[
+            styles.closeButton,
+            {
+              minWidth: Math.round(metrics.minTouchTarget * 0.75),
+              minHeight: Math.round(metrics.minTouchTarget * 0.75),
+            },
+          ]}
+          accessibilityLabel="收起键盘"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <X size={isTV ? 20 : 16} color={Colors.text.secondary} />
         </TouchableOpacity>
       </View>
@@ -143,7 +169,15 @@ export function SearchKeyboard({
               key={term}
               onPress={() => onQuickTerm(term)}
               activeOpacity={0.7}
-              style={[styles.quickChip, { borderRadius: metrics.radiusSm }]}
+              style={[
+                styles.quickChip,
+                {
+                  borderRadius: metrics.radiusSm,
+                  minHeight: Math.round(metrics.minTouchTarget * 0.6),
+                  justifyContent: "center",
+                },
+              ]}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
               <ThemedText style={[styles.quickChipText, { fontSize: metrics.caption }]}>{term}</ThemedText>
             </TouchableOpacity>
@@ -175,28 +209,28 @@ export function SearchKeyboard({
       <View style={[styles.row, { gap, marginTop: 2 }]}>
         <KeyButton
           label={numeric ? "ABC" : "123"}
-          width={Math.max(48, letterKeyWidth * 1.5)}
+          width={actionWidths[0]}
           height={keyHeight}
           fontSize={keyFont}
           onPress={() => setNumeric((value) => !value)}
         />
         <KeyButton
           label="删除"
-          width={Math.max(48, letterKeyWidth * 1.5)}
+          width={actionWidths[1]}
           height={keyHeight}
           fontSize={keyFont}
           onPress={onDelete}
         />
         <KeyButton
           label="清空"
-          width={Math.max(48, letterKeyWidth * 1.5)}
+          width={actionWidths[2]}
           height={keyHeight}
           fontSize={keyFont}
           onPress={onClear}
         />
         <KeyButton
           label="搜索"
-          width={Math.max(64, letterKeyWidth * 2)}
+          width={actionWidths[3]}
           height={keyHeight}
           fontSize={keyFont}
           accent
@@ -255,10 +289,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     flexWrap: "nowrap",
+    width: "100%",
+    minWidth: 0,
+    flexShrink: 1,
   },
   key: {
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 0,
     backgroundColor: Colors.surface.overlay,
     borderRadius: 8,
     borderWidth: 1,

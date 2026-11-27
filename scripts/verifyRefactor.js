@@ -46,7 +46,9 @@ function check(name, ok, detail = "") {
 // ── 1. 设计落地 ───────────────────────────────────────────────────────────
 check("统一紧凑标尺存在", has("utils/DesignTokens.ts", "useCompactLayout") &&
   has("utils/DesignTokens.ts", "getCompactMetrics"));
-check("标尺按栏宽推导封面（不再按整屏）", has("utils/DesignTokens.ts", "leftWidth * coverRatio"));
+check("标尺按栏宽推导封面且受可用高度约束",
+  has("utils/LargeScreen.ts", "leftWidth * coverRatio") &&
+  has("utils/LargeScreen.ts", "contentHeight * 0.34"));
 
 for (const page of ["app/search.tsx", "app/radio.tsx", "app/music.tsx"]) {
   check(`${page} 使用统一标尺`, has(page, "useCompactLayout"));
@@ -56,7 +58,7 @@ check("搜索键盘收进左栏独立面板", has("app/search.tsx", "panelWidth=
 check("音乐页键盘按右栏宽度收紧", has("app/music.tsx", "panelWidth={rightWidth}"));
 check("键盘支持面板宽度", has("components/SearchKeyboard.tsx", "panelWidth"));
 check("键盘焦点键翡翠绿高亮", has("components/SearchKeyboard.tsx", "keyHighlighted"));
-check("电视端遥控器提示", has("utils/DesignTokens.ts", "showRemoteHint") &&
+check("电视端遥控器提示", has("utils/LargeScreen.ts", "showRemoteHint") &&
   has("components/SearchKeyboard.tsx", "方向键移动"));
 check("音乐封面尺寸取自标尺", has("app/music.tsx", "const coverSize = metrics.coverSize"));
 check("右栏曲目网格与精选歌单", has("app/music.tsx", "gridColumns") && has("app/music.tsx", "精选歌单"));
@@ -145,7 +147,7 @@ const versions = ["package.json", "app.json", "desktop/package.json"].map((f) =>
   const match = read(f).match(/"version"\s*:\s*"([\d.]+)"/);
   return match ? match[1] : "?";
 });
-check("三处版本号统一为 2.3.0", versions.every((v) => v === "2.3.0"), versions.join("/"));
+check("三处版本号统一为 2.4.0", versions.every((v) => v === "2.4.0"), versions.join("/"));
 
 const passed = results.filter(Boolean).length;
 console.log(`\nRESULT ${passed}/${results.length}`);

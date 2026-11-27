@@ -21,8 +21,8 @@ export default function Root({children}: PropsWithChildren) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="description" content="ZTV 全端视频直播、音乐在线与网络收音机" />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+        <link rel="manifest" href="./manifest.json" />
+        <link rel="icon" href="./icon.svg" type="image/svg+xml" />
 
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.
