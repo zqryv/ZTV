@@ -85,6 +85,19 @@
 
 附加不变式（由矩阵脚本静态校验）：三屏均有滚动兜底与 `maxHeight` 约束；系统字体缩放关闭；TV 端不再按屏宽放大行高；窗口 / 分辨率监听齐全；Web 键盘桥接存在；TV 焦点单轨（无 `select/up/down` 全局消费）；键盘功能行不再使用硬下限。
 
+**线上站点实测**（Edge headless 直连 `https://zqryv.github.io/ZTV/`）
+
+| 检查项 | 结果 |
+| --- | --- |
+| HTTP 状态 | `/ZTV/`、`/ZTV/search`、`/ZTV/music`、`/ZTV/radio`、`/ZTV/manifest.json` 均 **200** |
+| Pages 状态 | API `status=built`，`source=gh-pages / /`，`build_type=legacy` |
+| 搜索页 1920×1080 / 1280×720 | 屏幕键盘功能行（123 / 删除 / 清空 / 搜索）完整，热搜榜、字母区、榜单、猜你想搜均无裁切 |
+| 音乐在线 1920×1080 / 3840×2160 | 播放器、筛选、发现音乐网格、推荐卡片完整；4K 下无异常放大 |
+| 收音机 1920×1080 / 1024×768 | 播放卡片、分类 / 地区胶囊、音量档、电台列表完整；首个电台卡片带焦点框，遥控器焦点可用 |
+| v2.4.0 Release | workflow `45996190471` success，7 个平台产物齐全 |
+
+八个显式路由入口（`search/ music/ radio/ live/ play/ detail/ favorites/ settings/`）已生成，深链直接返回 200，不再依赖 `404.html` 回退。
+
 ## 五、部署地址
 
 - GitHub 仓库：`https://github.com/zqryv/ZTV`
@@ -96,3 +109,5 @@
 - 本版只调整展示层、交互层与部署配置，未改动任何音源、播放、更新、数据接口与业务逻辑；内置电台 / 曲目、三级降级、失焦停止、更新链路全部沿用 v2.3.0。
 - 公开音频流受网络环境与地区策略影响，应用内保留多源降级与在线目录兜底。
 - 电视 / 投影浏览器的方向键导航依赖 DOM 可聚焦元素；项目控件已统一使用 `TouchableOpacity` / `StyledButton`（RN Web 会渲染 `tabindex` 与 `role`），并补 `hitSlop` 与最小尺寸。
+- `push main` 目前不会自动重建站点（当前凭证缺少 `workflow` scope，`docs/pages-workflow.yml` 为可选 CI 模板）；更新页面内容需重新导出并按 `DEPLOY.md` 发布到 `gh-pages` 分支。
+- v2.4.0 tag / Release 与线上静态产物均包含全部应用代码修复；tag 之后对 `main` 的改动仅为文档与校验脚本，不涉及运行时代码，因此 7 个下载产物与网站无需重新构建。
