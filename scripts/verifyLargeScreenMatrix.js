@@ -165,7 +165,10 @@ check("键盘按键可收缩且带 hitSlop", has("components/SearchKeyboard.tsx"
   has("components/SearchKeyboard.tsx", "hitSlop"));
 
 // ── 5. GitHub Pages 站点配置 ──────────────────────────────────────────────
-check("Pages 部署工作流存在", exists(".github/workflows/pages.yml"));
+check(
+  "Pages 部署工作流模板存在",
+  exists("docs/pages-workflow.yml") || exists(".github/workflows/pages.yml"),
+);
 check("Pages 产物准备脚本存在", exists("scripts/preparePages.js"));
 check("PWA manifest 使用相对路径", has("public/manifest.json", '"start_url": "./"') &&
   has("public/manifest.json", '"src": "./icon.svg"'));

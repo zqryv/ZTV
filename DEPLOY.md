@@ -39,13 +39,12 @@ curl -X POST \
 
 ## 4. GitHub Pages 网站
 
-- **访问地址**：https://zqryv.github.io/ZTV/
-- 工作流：`.github/workflows/pages.yml`，`push main` 或手动 `workflow_dispatch` 触发。
-- 构建步骤：`yarn install --frozen-lockfile` → 临时给 `app.json` 注入 `expo.experiments.baseUrl = "/ZTV"` → `npx expo export --platform web` → `node scripts/preparePages.js web-build` → `actions/deploy-pages@v4`。
-- `preparePages.js` 负责：把资源绝对路径改写为 `/ZTV/...`、生成 `404.html` 作为 SPA 深链回退、生成 `.nojekyll` 保留 `_expo` 资源目录、把 PWA manifest 改为相对路径。
+- **访问地址**：https://zqryv.github.io/ZTV/ （已启用，Pages API 状态 `built`）。
+- **当前部署方式**：Web 静态产物发布在 `gh-pages` 分支，Pages Source 设为 `gh-pages / /`（`build_type: legacy`）。`push main` 不会自动重建站点，需要按下方步骤重新发布产物。
+- **可选自动化**：仓库提供 `docs/pages-workflow.yml` 模板，将其放到 `.github/workflows/pages.yml` 后，具备 `workflow` scope 的凭证即可让 `push main` 自动构建与部署（步骤：`yarn install --frozen-lockfile` → 临时注入 `expo.experiments.baseUrl = "/ZTV"` → `npx expo export --platform web` → `node scripts/preparePages.js web-build` → `actions/deploy-pages@v4`）。当前 PAT 的 scopes 为 `repo, write:packages`，GitHub 拒绝由它新增工作流文件，因此采用分支部署。
+- `preparePages.js` 负责：把资源绝对路径改写为 `/ZTV/...`、生成 `404.html` 作为 SPA 深链回退、生成 `.nojekyll` 保留 `_expo` 资源目录、把 PWA manifest 改为相对路径；`search/ music/ radio/ live/ play/ detail/ favorites/ settings/` 另有同名 `index.html`，让深链直接返回 200。
 - 仓库中的 `app.json` **不含** baseUrl，因此 `release.yml` 产出的鸿蒙离线 PWA zip 仍可用 `file://` 直接打开，不受 Pages 子路径影响。
-- 首次使用需在仓库 **Settings → Pages** 把 Source 设为 **GitHub Actions**（也可通过 `POST /repos/zqryv/ZTV/pages` 的 `{"build_type":"workflow"}` 启用）。
-- 站点支持直接访问 `/ZTV/`、`/ZTV/search`、`/ZTV/music`、`/ZTV/radio`，刷新深链由 `404.html` 承接。
+- 站点支持直接访问 `/ZTV/`、`/ZTV/search`、`/ZTV/music`、`/ZTV/radio` 等路由。
 
 ## 5. 各平台安装方式
 

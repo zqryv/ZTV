@@ -52,7 +52,8 @@
 
 - `components/SearchKeyboard.tsx`：容器 `maxWidth = panelWidth`、按键 `minWidth:0 / flexShrink:1 / hitSlop`、功能行按权重分配、快捷键最小高度贴近 `minTouchTarget`；
 - `public/manifest.json` 与 `app/+html.tsx` 改用相对路径；
-- 新增 `.github/workflows/pages.yml`、`scripts/preparePages.js`：构建时临时注入 `expo.experiments.baseUrl = "/ZTV"`，导出后改写资源路径、生成 `404.html` / `.nojekyll`、修正 PWA manifest；仓库文件保持无前缀，鸿蒙离线 PWA zip 不受影响。
+- 新增 `scripts/preparePages.js` 与 `docs/pages-workflow.yml`（可选 CI 模板）：构建时临时注入 `expo.experiments.baseUrl = "/ZTV"`，导出后改写资源路径、生成 `404.html` / `.nojekyll`、修正 PWA manifest，并为八个路由生成显式 `index.html` 使深链返回 200；仓库文件保持无前缀，鸿蒙离线 PWA zip 不受影响。
+- **实际部署**：产物发布在 `gh-pages` 分支，Pages Source 为 `gh-pages / /`。当前 PAT 缺少 `workflow` scope，GitHub 拒绝新增 `.github/workflows/` 文件，因此未启用自动工作流；具备该权限时把模板移入 `.github/workflows/pages.yml` 即可开启 `push main` 自动部署。
 
 ## 三、大屏分辨率矩阵（Web 投屏 / 桌面，扣除 200px 侧栏 + 顶栏）
 

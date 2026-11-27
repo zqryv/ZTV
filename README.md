@@ -10,7 +10,7 @@
 - **三屏不再被裁剪**：搜索 / 音乐在线 / 收音机左栏改为独立 `ScrollView` 兜底（`contentContainerStyle` + `maxHeight: contentHeight`），解决 Web 端 `body{overflow:hidden}` 造成的「内容显示不完整」；音乐右栏按扣除侧栏后的 `contentWidth` 推导；4K 放大字号与控件，720p / 4:3 投影收紧行高与键盘。
 - **按钮可选中、可操作**：`ThemedText` 关闭系统字体缩放，`useScale` 固定为 1，消除原生 TV 上 `lineHeight` 被放大 2~4 倍的「界面被放大」；统一大屏 60px 最小点击区与 hitSlop；移除音乐 / 收音机全局遥控器里与原生焦点冲突的 `select/up/down`，焦点改由 `onFocus` + `hasTVPreferredFocus` 单轨驱动；`useSafeTVEventHandler` 补 Web / 投影浏览器键盘桥接（方向键几何焦点导航、Enter/Space 触发、Escape 返回、媒体键）。
 - **屏幕键盘不再溢出**：功能键按面板实际宽度做权重分配，取消 `Math.max(48/64)` 硬下限，任意分辨率下总宽都不超过面板。
-- **网页访问地址**：新增 `.github/workflows/pages.yml` 与 `scripts/preparePages.js`，部署 Web/PWA 到 GitHub Pages（导出时临时注入 `/ZTV` base path，不影响鸿蒙离线 zip），生成 `404.html` / `.nojekyll` 与相对路径 PWA manifest。站点：**https://zqryv.github.io/ZTV/**。
+- **网页访问地址**：Web/PWA 已部署到 GitHub Pages（**https://zqryv.github.io/ZTV/**）。`scripts/preparePages.js` 负责导出时临时注入 `/ZTV` base path、生成 `404.html` / `.nojekyll` 与相对路径 PWA manifest，并为八个路由生成显式入口使深链直接返回 200；产物发布在 `gh-pages` 分支。仓库内 `docs/pages-workflow.yml` 是可选的 CI 自动部署模板（当前 PAT 无 `workflow` scope，故采用分支部署）。
 - **验证**：`tsc --noEmit` 0 错误、Jest 全通过、`verifyRefactor` 51/51、`verifyLargeScreenMatrix` 248/248（8 种分辨率 × Web / 原生 TV / 机顶盒）、`verifyAudioSources` 18/18、Web 静态导出与多视口 headless 渲染通过。完整修改说明与验证结果见 [`docs/LARGE_SCREEN_ADAPTATION.md`](docs/LARGE_SCREEN_ADAPTATION.md)。
 
 ### v2.3.0 三界面紧凑重构 / 分地区免费音源 / 更新链路提速
