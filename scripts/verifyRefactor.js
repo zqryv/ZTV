@@ -50,26 +50,26 @@ check("标尺按栏宽推导封面且受可用高度约束",
   has("utils/LargeScreen.ts", "leftWidth * coverRatio") &&
   has("utils/LargeScreen.ts", "contentHeight * 0.34"));
 
-for (const page of ["app/search.tsx", "app/radio.tsx", "app/music.tsx"]) {
+for (const page of ["modules/search/SearchScreen.tsx", "modules/radio/RadioScreen.tsx", "modules/music/MusicScreen.tsx"]) {
   check(`${page} 使用统一标尺`, has(page, "useCompactLayout"));
   check(`${page} 大屏左右分栏`, has(page, "columnsWide") && has(page, "leftColumnWide"));
 }
-check("搜索键盘收进左栏独立面板", has("app/search.tsx", "panelWidth={isWide ? metrics.leftWidth : undefined}"));
-check("音乐页键盘按右栏宽度收紧", has("app/music.tsx", "panelWidth={rightWidth}"));
+check("搜索键盘收进左栏独立面板", has("modules/search/SearchScreen.tsx", "panelWidth={isWide ? metrics.leftWidth : undefined}"));
+check("音乐页键盘按右栏宽度收紧", has("modules/music/MusicScreen.tsx", "panelWidth={rightWidth}"));
 check("键盘支持面板宽度", has("components/SearchKeyboard.tsx", "panelWidth"));
 check("键盘焦点键翡翠绿高亮", has("components/SearchKeyboard.tsx", "keyHighlighted"));
 check("电视端遥控器提示", has("utils/LargeScreen.ts", "showRemoteHint") &&
   has("components/SearchKeyboard.tsx", "方向键移动"));
-check("音乐封面尺寸取自标尺", has("app/music.tsx", "const coverSize = metrics.coverSize"));
-check("右栏曲目网格与精选歌单", has("app/music.tsx", "gridColumns") && has("app/music.tsx", "精选歌单"));
-check("搜索页 TOP5 与猜你想搜", has("app/search.tsx", "HOT_TOP_ITEMS.slice(0, 5)") && has("app/search.tsx", "猜你想搜"));
-check("收音机电视单列 / 桌面双列", has("app/radio.tsx", "isTVLike ? 1 : isWide ? 2 : 1"));
+check("音乐封面尺寸取自标尺", has("modules/music/MusicScreen.tsx", "const coverSize = metrics.coverSize"));
+check("右栏曲目网格与精选歌单", has("modules/music/MusicScreen.tsx", "gridColumns") && has("modules/music/MusicScreen.tsx", "精选歌单"));
+check("搜索页 TOP5 与猜你想搜", has("modules/search/SearchScreen.tsx", "HOT_TOP_ITEMS.slice(0, 5)") && has("modules/search/SearchScreen.tsx", "猜你想搜"));
+check("收音机电视单列 / 桌面双列", has("modules/radio/RadioScreen.tsx", "isTVLike ? 1 : isWide ? 2 : 1"));
 
 // ── 2. 更名 ───────────────────────────────────────────────────────────────
 check("首页分类改为音乐在线", has("stores/homeStore.ts", 'title: "音乐在线"') &&
   !has("stores/homeStore.ts", 'title: "音乐播放"'));
-check("音乐页标题改为音乐在线", has("app/music.tsx", 'title="音乐在线"') &&
-  has("app/music.tsx", "音乐在线</ThemedText>"));
+check("音乐页标题改为音乐在线", has("modules/music/MusicScreen.tsx", 'title="音乐在线"') &&
+  has("modules/music/MusicScreen.tsx", "音乐在线</ThemedText>"));
 check("侧边栏导航同步更名", has("components/navigation/TabletSidebarNavigator.tsx", "音乐在线"));
 check("底部/Tab 导航同步更名", has("components/MobileBottomNavigation.tsx", "音乐在线") &&
   has("components/navigation/MobileTabContainer.tsx", "音乐在线"));
@@ -129,25 +129,40 @@ check("内置曲目均为 https", library.BUILTIN_TRACKS.every((t) => HTTPS(t.ur
 check("内置电台标注来源", library.BUILTIN_RADIO_STATIONS.every((s) => !!s.source),
   `${library.BUILTIN_RADIO_STATIONS.filter((s) => !!s.source).length}/${library.BUILTIN_RADIO_STATIONS.length}`);
 
-check("收音机保留失焦停止与资源释放", has("app/radio.tsx", "useFocusEffect") &&
-  has("app/radio.tsx", "audioPlayer.stop()"));
-check("收音机保留自定义电台与遥控器", has("app/radio.tsx", "addCustomStation") &&
-  has("app/radio.tsx", "useSafeTVEventHandler"));
-check("音乐在线保留失焦停止与三级降级", has("app/music.tsx", "useFocusEffect") &&
-  has("app/music.tsx", "fetchMusicChannels") && has("app/music.tsx", "browseMusicByGenre"));
-check("音乐在线保留常驻可输入搜索框", has("app/music.tsx", "editable") &&
-  has("app/music.tsx", "focusable={!isTVLike}"));
-check("音乐在线保留屏幕键盘与热词", has("app/music.tsx", "SearchKeyboard") &&
-  has("app/music.tsx", "MUSIC_QUICK_TERMS"));
-check("搜索保留拼音首字母与远程输入", has("app/search.tsx", "matchesInitials") &&
-  has("app/search.tsx", "RemoteControlModal"));
+check("收音机保留失焦停止与资源释放", has("modules/radio/RadioScreen.tsx", "useFocusEffect") &&
+  has("modules/radio/RadioScreen.tsx", "audioPlayer.stop()"));
+check("收音机保留自定义电台与遥控器", has("modules/radio/RadioScreen.tsx", "addCustomStation") &&
+  has("modules/radio/RadioScreen.tsx", "useSafeTVEventHandler"));
+check("音乐在线保留失焦停止与三级降级", has("modules/music/MusicScreen.tsx", "useFocusEffect") &&
+  has("modules/music/MusicScreen.tsx", "fetchMusicChannels") && has("modules/music/MusicScreen.tsx", "browseMusicByGenre"));
+check("三屏搜索框焦点修复（统一可聚焦输入组件）",
+  has("components/SearchInput.tsx", "editable={true}") &&
+  has("components/SearchInput.tsx", "focusable={true}") &&
+  has("components/SearchInput.tsx", "showSoftInputOnFocus={!isTVLike}") &&
+  !has("modules/search/SearchScreen.tsx", "if (!isTVLike) setShowKeyboard(false)") &&
+  has("modules/search/SearchScreen.tsx", "<SearchInput") &&
+  has("modules/music/MusicScreen.tsx", "<SearchInput"));
+check("音乐在线保留屏幕键盘与热词", has("modules/music/MusicScreen.tsx", "SearchKeyboard") &&
+  has("modules/music/MusicScreen.tsx", "MUSIC_QUICK_TERMS"));
+check("搜索保留拼音首字母与远程输入", has("modules/search/SearchScreen.tsx", "matchesInitials") &&
+  has("modules/search/SearchScreen.tsx", "RemoteControlModal"));
 
 // ── 5. 版本号一致 ─────────────────────────────────────────────────────────
 const versions = ["package.json", "app.json", "desktop/package.json"].map((f) => {
   const match = read(f).match(/"version"\s*:\s*"([\d.]+)"/);
   return match ? match[1] : "?";
 });
-check("三处版本号统一为 2.4.0", versions.every((v) => v === "2.4.0"), versions.join("/"));
+check("三处版本号统一为 2.5.0", versions.every((v) => v === "2.5.0"), versions.join("/"));
+check("模块化路由薄壳", ["app/search.tsx", "app/music.tsx", "app/radio.tsx"].every((f) =>
+  has(f, "export default Screen") && has(f, "@/modules/")));
+check("中文拼音键盘与离线缓存接入",
+  has("modules/search/SearchScreen.tsx", "pushLetter") &&
+  has("modules/music/MusicScreen.tsx", "loadMusicCore") &&
+  has("modules/radio/RadioScreen.tsx", "cacheProgram"));
+check("国内/海外双通道更新",
+  has("constants/UpdateConfig.ts", "DOMESTIC_VERSION_MIRRORS") &&
+  has("constants/UpdateConfig.ts", "OVERSEAS_VERSION_MIRRORS") &&
+  has("services/updateChannels.ts", "getUpdateRegion"));
 
 const passed = results.filter(Boolean).length;
 console.log(`\nRESULT ${passed}/${results.length}`);

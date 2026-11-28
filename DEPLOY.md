@@ -1,4 +1,4 @@
-# ZTV 部署与发布指南（v2.4.0）
+# ZTV 部署与发布指南（v2.5.0）
 
 ## 1. 仓库与分支
 
@@ -10,7 +10,7 @@
 
 ```bash
 cd ZTV
-git add -A && git commit -m "feat: v2.4.0 大屏适配"
+git add -A && git commit -m "feat: v2.5.0 大屏适配"
 git push origin main
 
 # 手动触发全平台 Release（auto-tag 已自动建好 tag）
@@ -21,19 +21,19 @@ curl -X POST \
   -d '{"ref":"main"}'
 ```
 
-在 **Actions** 页查看 `ZTV Release (all platforms)`；全部 job 成功后，**Releases** 页自动发布 `v2.4.0`。
+在 **Actions** 页查看 `ZTV Release (all platforms)`；全部 job 成功后，**Releases** 页自动发布 `v2.5.0`。
 
 ## 3. Release 产物（7 个）
 
 | 平台 | 资源文件 |
 | --- | --- |
-| Android TV | `ZTV-v2.4.0-android-tv.apk` |
-| Android 手机/平板 / 鸿蒙 4.x | `ZTV-v2.4.0-android.apk` |
-| 鸿蒙 NEXT（离线 PWA） | `ZTV-v2.4.0-harmony-web.zip` |
-| Windows | `ZTV-v2.4.0-windows-setup.exe` |
-| Ubuntu | `ZTV-v2.4.0-linux-amd64.deb` |
-| macOS | `ZTV-v2.4.0-macos-universal.dmg` |
-| iOS（iPhone / iPad） | `ZTV-v2.4.0-ios-xcode-project.zip` |
+| Android TV | `ZTV-v2.5.0-android-tv.apk` |
+| Android 手机/平板 / 鸿蒙 4.x | `ZTV-v2.5.0-android.apk` |
+| 鸿蒙 NEXT（离线 PWA） | `ZTV-v2.5.0-harmony-web.zip` |
+| Windows | `ZTV-v2.5.0-windows-setup.exe` |
+| Ubuntu | `ZTV-v2.5.0-linux-amd64.deb` |
+| macOS | `ZTV-v2.5.0-macos-universal.dmg` |
+| iOS（iPhone / iPad） | `ZTV-v2.5.0-ios-xcode-project.zip` |
 
 > 签名 IPA 为可选 job，需配置 `EXPO_TOKEN` 与 `ENABLE_IOS_EAS`，默认跳过。
 
@@ -48,10 +48,10 @@ curl -X POST \
 
 ## 5. 各平台安装方式
 
-- **Android TV**：U 盘拷贝 APK 安装，或 `adb install -r ZTV-v2.4.0-android-tv.apk`。
+- **Android TV**：U 盘拷贝 APK 安装，或 `adb install -r ZTV-v2.5.0-android-tv.apk`。
 - **Android 手机/平板 / 鸿蒙 4.x**：直接安装 APK，允许「未知来源」。
-- **鸿蒙 NEXT**：解压 `ZTV-v2.4.0-harmony-web.zip`，浏览器打开 `index.html` →「添加到桌面」；或直接访问上面的 Pages 网址。
-- **Windows / Ubuntu / macOS**：双击安装包 / `sudo apt install ./ZTV-v2.4.0-linux-amd64.deb`。
+- **鸿蒙 NEXT**：解压 `ZTV-v2.5.0-harmony-web.zip`，浏览器打开 `index.html` →「添加到桌面」；或直接访问上面的 Pages 网址。
+- **Windows / Ubuntu / macOS**：双击安装包 / `sudo apt install ./ZTV-v2.5.0-linux-amd64.deb`。
 - **电视 / 投影仪浏览器**：打开 Pages 网址，方向键移动焦点、Enter/OK 确认、Escape 返回；媒体键可播放/暂停。
 
 > Windows / Ubuntu / macOS 安装包由 `desktop/` 下的 Electron 外壳封装 Web 导出物生成，视频解码能力弱于 Android TV 版，主要用于大屏浏览与设置体验。
@@ -64,17 +64,42 @@ yarn typecheck                       # tsc --noEmit
 npx jest --ci --runInBand            # 单元 / 快照测试
 node scripts/verifyRefactor.js       # 既有重构不变式
 node scripts/verifyLargeScreenMatrix.js  # 大屏分辨率矩阵（8 分辨率 × 3 平台）
+node scripts/verifyModules.js        # 模块化 / 中文输入 / 离线 / 双通道
 node scripts/verifyAudioSources.js  # 音源真实可用性
+node scripts/buildModulePacks.js    # 重建模块资源包与清单
 npx expo export --platform web      # Web/PWA 静态导出
 ```
 
-## 7. v2.4.0 验证结果
+## 7. v2.5.0 验证结果
 
 - `tsc --noEmit`：**0 错误**。
-- Jest：**6 suites / 90 tests / 1 snapshot 全通过**（新增 `utils/__tests__/LargeScreen.test.ts`；`ThemedText` 快照已按关闭字体缩放更新）。
-- `verifyRefactor.js`：**51/51**（含三处版本号统一 2.4.0）。
-- `verifyLargeScreenMatrix.js`：**248/248**，覆盖 1024×768 / 1280×720 / 1280×800 / 1366×768 / 1920×1080 / 1920×1200 / 2560×1440 / 3840×2160 共 8 种分辨率 × Web 投屏 / 原生电视 / 机顶盒 3 类平台。
+- Jest：**10 suites / 106 tests / 1 snapshot 全通过**（新增拼音输入、音乐雷达 / 熔断、模块校验和、内置资源包 4 组测试）。
+- `verifyRefactor.js`：**54/54**（含三处版本号统一 2.5.0、路由薄壳化、焦点修复）。
+- `verifyLargeScreenMatrix.js`：**248/248**，8 分辨率 × 3 平台。
+- `verifyModules.js`：**53/53**（清单校验和一致性、单模块重建、中文输入语义、离线节目、双通道）。
 - `verifyAudioSources.js`：**18/18**。
-- Web 静态导出：成功，`EXPO_BASE_URL` / `experiments.baseUrl` 注入、资源路径改写、`404.html`、`.nojekyll`、相对 manifest 均已实测。
-- 多视口 headless 浏览器渲染：1920×1080 / 1280×720 / 1024×768 / 3840×2160 下三屏完整显示、无裁剪。
-- 完整修改说明见 `docs/LARGE_SCREEN_ADAPTATION.md`。
+- Web 静态导出与线上多视口 headless 渲染通过。
+- 完整说明：`docs/MODULAR_ARCHITECTURE.md`、`docs/OFFLINE_RADIO.md`、`docs/LARGE_SCREEN_ADAPTATION.md`。
+
+## 8. 单独升级一个模块（不发版）
+
+```bash
+# 1. 只改 modules/defaultPacks.ts 中目标模块的 config 与版本
+node scripts/buildModulePacks.js --only music
+# 2. 把 module-packs/music.json 与 module-registry.json 推到 main 分支
+# 3. 客户端：设置 → 模块独立更新 → 检查模块更新 → 更新「音乐在线」
+```
+
+只需推送两个小 JSON（约 1~2 KB + 清单），**不需要打包 APK / dmg / exe，也不需要用户重装 App**。其它模块包的 checksum 保持不变，不会被误更新。校验和与体积由构建脚本计算，客户端下载后复核，失败自动保留旧版本；设置页可一键回滚到内置包。
+
+## 9. 国内 / 海外更新通道
+
+| 用途 | 国内通道 | 海外通道 |
+| --- | --- | --- |
+| 版本检查 / 模块清单 / 资源包 | `cdn.jsdelivr.net`、`fastly.jsdelivr.net`、`gcore.jsdelivr.net`、`ghproxy.net` 代理 | `raw.githubusercontent.com`、`github.com/raw/refs/heads/main` |
+| 安装包下载 | `ghfast.top`、`gh-proxy.com`、`ghproxy.net`、`hub.gitmirror.com` 四个加速前缀 | GitHub Releases 直连 |
+
+- `services/updateChannels.ts` 在 `auto` 模式下用时区 / 语言提示选择首轮优先通道，但**两组端点始终全部保留**作兜底；所有请求并发竞速，任一可用即成功。
+- 成功端点的耗时写入 AsyncStorage，下次优先；用户也可在「设置 → 模块独立更新」手动切换自动 / 国内优先 / 海外优先。
+- 所有 URL 带请求时时间戳，避免 CDN 返回旧版本；模块包独立走 jsDelivr + GitHub raw 双通道。
+- `app.json` 的 `extra` 声明 `moduleRegistry` / `modulePackDir` / `updateChannels`，便于换仓库或自建镜像时统一改配置。

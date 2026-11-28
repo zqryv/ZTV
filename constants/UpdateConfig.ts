@@ -58,19 +58,44 @@ export const TARGET_LABELS: Record<UpdateTarget, string> = {
   linux: "Linux",
 };
 
-/** 版本镜像：全部使用真实可访问路径，时间戳在「每次请求时」生成 */
-const VERSION_MIRROR_BUILDERS: Array<() => string> = [
-  () => `${GITHUB_RAW_BASE}/main/package.json?t=${Date.now()}`,
+/**
+ * v2.5.0 双通道：国内走 jsDelivr 三节点 + GitHub 加速代理，
+ * 海外走 raw.githubusercontent.com / github.com 直连。
+ * 时间戳在「每次请求时」生成，避免 CDN 返回旧版本。
+ */
+const DOMESTIC_VERSION_MIRRORS: Array<() => string> = [
   () => `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
   () => `https://fastly.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
+  () => `https://gcore.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
+  () => `https://ghproxy.net/${GITHUB_RAW_BASE}/main/package.json?t=${Date.now()}`,
+];
+
+const OVERSEAS_VERSION_MIRRORS: Array<() => string> = [
+  () => `${GITHUB_RAW_BASE}/main/package.json?t=${Date.now()}`,
   () => `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/raw/refs/heads/main/package.json?t=${Date.now()}`,
 ];
 
-/** 安装包下载镜像：直连优先，失败后依次尝试（代理仅用于 GitHub 原始下载地址） */
-const DOWNLOAD_MIRROR_PREFIXES = [
+/** 交错排列，保证并发竞速时国内与海外端点都有机会先返回 */
+const VERSION_MIRROR_BUILDERS: Array<() => string> = [];
+for (let i = 0; i < Math.max(DOMESTIC_VERSION_MIRRORS.length, OVERSEAS_VERSION_MIRRORS.length); i += 1) {
+  if (DOMESTIC_VERSION_MIRRORS[i]) VERSION_MIRROR_BUILDERS.push(DOMESTIC_VERSION_MIRRORS[i]);
+  if (OVERSEAS_VERSION_MIRRORS[i]) VERSION_MIRROR_BUILDERS.push(OVERSEAS_VERSION_MIRRORS[i]);
+}
+
+/** 安装包下载镜像：直连 + 四个国内加速代理，失败时依次换源 */
+export const DOWNLOAD_MIRROR_PREFIXES = [
   "",
   "https://ghfast.top/",
   "https://gh-proxy.com/",
+  "https://ghproxy.net/",
+  "https://hub.gitmirror.com/",
+];
+
+/** 模块清单 / 资源包同样走双通道 jsDelivr + GitHub raw */
+const MODULE_FILE_MIRRORS = [
+  `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main`,
+  `https://fastly.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main`,
+  GITHUB_RAW_BASE,
 ];
 
 export const UPDATE_CONFIG = {
@@ -106,6 +131,16 @@ export const UPDATE_CONFIG = {
 
   /** 兼容旧调用方：返回一组静态镜像地址 */
   GITHUB_RAW_URLS: VERSION_MIRROR_BUILDERS.map((build) => build()),
+
+  /** v2.5.0：模块清单候选，供模块级独立更新使用（双通道） */
+  getModuleRegistryUrls(): string[] {
+    return MODULE_FILE_MIRRORS.map((base) => `${base}/module-registry.json?t=${Date.now()}`);
+  },
+
+  /** v2.5.0：单个模块资源包候选，升级一个模块只下载几 KB */
+  getModulePackUrls(id: string): string[] {
+    return MODULE_FILE_MIRRORS.map((base) => `${base}/module-packs/${id}.json?t=${Date.now()}`);
+  },
 
   getReleasePageUrl(version: string): string {
     return `${GITHUB_RELEASE_BASE}/tag/v${version}`;

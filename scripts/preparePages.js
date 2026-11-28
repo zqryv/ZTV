@@ -56,6 +56,31 @@ writeFile("index.html", html);
 writeFile("404.html", html);
 writeFile(".nojekyll", "");
 
+// 显式路由入口：让 /ZTV/search 等深链直接返回 200，而不是靠 404.html 兜底
+const ROUTES = ["search", "music", "radio", "live", "play", "detail", "favorites", "settings"];
+for (const route of ROUTES) {
+  const routeDir = path.join(root, route);
+  fs.mkdirSync(routeDir, { recursive: true });
+  fs.writeFileSync(path.join(routeDir, "index.html"), html, "utf8");
+}
+
+// v2.5.0：把模块清单与资源包一并发布到站点，便于查看与外部系统集成
+const projectRoot = process.cwd();
+const registrySrc = path.join(projectRoot, "module-registry.json");
+if (fs.existsSync(registrySrc)) {
+  fs.copyFileSync(registrySrc, path.join(root, "module-registry.json"));
+}
+const packsSrc = path.join(projectRoot, "module-packs");
+if (fs.existsSync(packsSrc)) {
+  const packsDst = path.join(root, "module-packs");
+  fs.mkdirSync(packsDst, { recursive: true });
+  for (const file of fs.readdirSync(packsSrc)) {
+    if (file.endsWith(".json")) {
+      fs.copyFileSync(path.join(packsSrc, file), path.join(packsDst, file));
+    }
+  }
+}
+
 // PWA manifest：子路径安装时 start_url / scope / icons 必须是相对或带 base 的路径
 const manifestPath = "manifest.json";
 if (fs.existsSync(path.join(root, manifestPath))) {

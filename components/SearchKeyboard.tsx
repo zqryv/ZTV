@@ -1,15 +1,22 @@
 /**
- * 搜索页 / 音乐在线页内置屏幕键盘（v2.3.0 紧凑化）。
+ * 搜索页 / 音乐在线页内置屏幕键盘（v2.5.0 中文输入重构）。
  *
- * 设计稿要点：
- * - 大屏键盘收进左栏独立面板（电视仅占约 40% 宽），不再铺满全屏；
- * - 按键宽度由「面板宽度」推导，传入 panelWidth 即可自适应分栏；
- * - 当前字母用翡翠绿填充 + 发光描边，遥控器焦点明确；
- * - 手机端按键与行距收紧，键盘不再挤占热搜 / 曲目区域。
+ * v2.3.0 起：大屏键盘收进左栏独立面板、宽度按 panelWidth 推导、
+ * 当前字母翡翠绿高亮、功能行按权重分配避免被 nowrap 裁切。
+ *
+ * v2.5.0 新增：
+ *  - 中文拼音组合区 + 候选栏（全拼 / 首字母 / 单字三路召回）；
+ *  - 「中 / En」切换，英文模式保持原来的逐字符输入；
+ *  - 删除键由页面统一处理：先退拼音，再退正文最后一个码点；
+ *  - 清空与回退语义统一，候选可点、可遥控器 OK 选中。
+ *
+ * 键盘本身只负责展示与事件转发，输入法逻辑放在 modules/search/pinyinIme.ts，
+ * 便于单独升级而不改动页面。
  */
 import React, { useState } from "react";
 import {
   View,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Platform,
@@ -32,14 +39,18 @@ interface SearchKeyboardProps {
   onSearch: () => void;
   onClear: () => void;
   onClose: () => void;
-  /** 可选：标题 / 提示语，供不同页面复用 */
   title?: string;
   hint?: string;
-  /** 可选：一键输入的热词（中文歌手 / 风格），解决遥控器无法输入中文的问题 */
   quickTerms?: string[];
   onQuickTerm?: (term: string) => void;
-  /** 可选：面板实际宽度。分栏时传左栏宽度，键盘按此收紧；不传则沿用整屏宽度 */
   panelWidth?: number;
+  /** v2.5.0 中文输入法 */
+  imeEnabled?: boolean;
+  onToggleIme?: () => void;
+  composing?: string;
+  candidates?: string[];
+  onSelectCandidate?: (index: number) => void;
+  onCommitComposition?: () => void;
 }
 
 interface KeyButtonProps extends TouchableOpacityProps {
@@ -48,7 +59,6 @@ interface KeyButtonProps extends TouchableOpacityProps {
   height: number;
   accent?: boolean;
   preferred?: boolean;
-  /** 当前焦点 / 刚按下的按键：翡翠绿填充 + 发光描边 */
   highlighted?: boolean;
   fontSize?: number;
 }
@@ -97,10 +107,16 @@ export function SearchKeyboard({
   onClear,
   onClose,
   title = "屏幕键盘",
-  hint = "输入拼音首字母即可搜中文片名，如 QYN → 庆余年",
+  hint = "输入拼音或首字母选中文，如 qing / QYN → 庆余年",
   quickTerms,
   onQuickTerm,
   panelWidth,
+  imeEnabled = true,
+  onToggleIme,
+  composing = "",
+  candidates = [],
+  onSelectCandidate,
+  onCommitComposition,
 }: SearchKeyboardProps) {
   const [numeric, setNumeric] = useState(false);
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -114,11 +130,9 @@ export function SearchKeyboard({
   const maxKeyWidth = isTV
     ? Math.round(64 * Math.min(1.35, metrics.resolutionScale))
     : deviceForm === "phone" ? 34 : 48;
-  // 关键：分栏时按面板宽度计算，键盘不再占满整屏
   const baseWidth = panelWidth && panelWidth > 0 ? panelWidth : screenWidth - spacing * 2;
   const available = Math.max(190, Math.round(baseWidth - padding * 2));
   const letterKeyWidth = Math.max(18, Math.min(maxKeyWidth, (available - gap * 9) / 10));
-  // 大屏按键至少接近 10-foot 最小可聚焦区域，同时不超过左栏可用高度
   const keyHeight = Math.max(metrics.keyHeight, Math.min(metrics.minTouchTarget, 48));
   /** 功能行按 available 做权重分配：任何分辨率下总宽都不超过面板，不再被 nowrap 裁掉 */
   const actionWidths = getKeyboardActionWidths(available, gap);
@@ -127,6 +141,7 @@ export function SearchKeyboard({
   const highlight = (key: string) => {
     if (FOCUS_KEYS.has(key)) setActiveKey(key);
   };
+  const showComposition = imeEnabled && !!composing && !numeric;
 
   return (
     <View
@@ -146,6 +161,25 @@ export function SearchKeyboard({
             {hint}
           </ThemedText>
         </View>
+        {onToggleIme && (
+          <TouchableOpacity
+            onPress={onToggleIme}
+            accessibilityLabel="切换中文输入"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={[
+              styles.modeButton,
+              {
+                minWidth: Math.round(metrics.minTouchTarget * 0.9),
+                minHeight: Math.round(metrics.minTouchTarget * 0.75),
+                borderRadius: metrics.radiusSm,
+              },
+            ]}
+          >
+            <ThemedText style={[styles.modeText, { fontSize: metrics.caption }]}>
+              {imeEnabled ? "中" : "En"}
+            </ThemedText>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           onPress={onClose}
           style={[
@@ -182,6 +216,56 @@ export function SearchKeyboard({
               <ThemedText style={[styles.quickChipText, { fontSize: metrics.caption }]}>{term}</ThemedText>
             </TouchableOpacity>
           ))}
+        </View>
+      )}
+
+      {/* 中文拼音组合区：组合串 + 候选栏，遥控器可直接 OK 选中 */}
+      {showComposition && (
+        <View style={[styles.imeBox, { gap, marginBottom: gap + 2, borderRadius: metrics.radiusSm }]}>
+          <View style={styles.imeHeader}>
+            <ThemedText style={[styles.imePinyin, { fontSize: metrics.body }]}>
+              {`拼音 ${composing}`}
+            </ThemedText>
+            {onCommitComposition && (
+              <TouchableOpacity
+                onPress={onCommitComposition}
+                accessibilityLabel="提交英文字母"
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                style={[styles.commitButton, { minHeight: Math.round(metrics.minTouchTarget * 0.6) }]}
+              >
+                <ThemedText style={{ fontSize: metrics.caption, color: Colors.brand.accent }}>
+                  提交英文
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.candidateScroll}>
+            {candidates.length > 0 ? (
+              candidates.map((candidate, index) => (
+                <TouchableOpacity
+                  key={`${candidate}-${index}`}
+                  onPress={() => onSelectCandidate?.(index)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                  style={[
+                    styles.candidateChip,
+                    {
+                      borderRadius: metrics.radiusSm,
+                      minHeight: Math.round(metrics.minTouchTarget * 0.7),
+                    },
+                  ]}
+                >
+                  <ThemedText style={[styles.candidateText, { fontSize: metrics.body }]}>
+                    {candidate}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <ThemedText style={{ fontSize: metrics.caption, color: Colors.text.tertiary }}>
+                暂无候选 · 继续输入或删除
+              </ThemedText>
+            )}
+          </ScrollView>
         </View>
       )}
 
@@ -264,19 +348,19 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTitle: { flex: 1 },
-  title: {
-    fontWeight: "700",
-    color: Colors.brand.accent,
+  title: { fontWeight: "700", color: Colors.brand.accent },
+  hint: { color: Colors.text.tertiary, marginTop: 2 },
+  closeButton: { padding: 6, alignItems: "center", justifyContent: "center" },
+  modeButton: {
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,230,168,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(0,230,168,0.4)",
   },
-  hint: {
-    color: Colors.text.tertiary,
-    marginTop: 2,
-  },
-  closeButton: { padding: 6 },
-  quickRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+  modeText: { color: Colors.brand.accent, fontWeight: "700" },
+  quickRow: { flexDirection: "row", flexWrap: "wrap" },
   quickChip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -285,6 +369,25 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0,230,168,0.35)",
   },
   quickChipText: { color: Colors.brand.accent, fontWeight: "600" },
+  imeBox: {
+    backgroundColor: Colors.surface.overlay,
+    borderWidth: 1,
+    borderColor: Colors.surface.border,
+    padding: 8,
+  },
+  imeHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  imePinyin: { color: Colors.brand.accent, fontWeight: "700" },
+  commitButton: { justifyContent: "center", paddingHorizontal: 8 },
+  candidateScroll: { maxHeight: 64 },
+  candidateChip: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    marginRight: 6,
+    backgroundColor: "rgba(0,230,168,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(0,230,168,0.45)",
+  },
+  candidateText: { color: Colors.text.primary, fontWeight: "600" },
   row: {
     flexDirection: "row",
     justifyContent: "center",
@@ -302,10 +405,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.surface.border,
   },
-  keyAccent: {
-    backgroundColor: Colors.brand.accent,
-    borderColor: Colors.brand.accent,
-  },
+  keyAccent: { backgroundColor: Colors.brand.accent, borderColor: Colors.brand.accent },
   /** 设计稿：当前字母翡翠绿填充 + 发光描边 */
   keyHighlighted: {
     backgroundColor: Colors.brand.accent,
@@ -317,16 +417,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     elevation: 6,
   },
-  keyText: {
-    fontWeight: "600",
-    color: Colors.text.primary,
-  },
-  keyTextAccent: {
-    color: Colors.brand.onAccent,
-  },
-  remoteHint: {
-    color: Colors.text.tertiary,
-    textAlign: "right",
-    marginTop: 6,
-  },
+  keyText: { fontWeight: "600", color: Colors.text.primary },
+  keyTextAccent: { color: Colors.brand.onAccent },
+  remoteHint: { color: Colors.text.tertiary, textAlign: "right", marginTop: 6 },
 });

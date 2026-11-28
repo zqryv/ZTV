@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "appVersion": "2.5.0",
+  "updatedAt": "2026-11-28T12:22:47.903Z",
+  "modules": [
+    {
+      "id": "search",
+      "version": "2.5.0",
+      "minAppVersion": "2.5.0",
+      "title": "搜索",
+      "entry": "modules/search/SearchScreen",
+      "pack": "module-packs/search.json",
+      "checksum": "ea555a0da91a6773",
+      "size": 530,
+      "changelog": [
+        "输入框焦点修复",
+        "中文拼音候选键盘",
+        "删除 / 清空 / 回退语义统一"
+      ]
+    },
+    {
+      "id": "music",
+      "version": "2.5.0",
+      "minAppVersion": "2.5.0",
+      "title": "音乐在线",
+      "entry": "modules/music/MusicScreen",
+      "pack": "module-packs/music.json",
+      "checksum": "a4ef099e24b102df",
+      "size": 623,
+      "changelog": [
+        "输入框焦点修复",
+        "有效结果缓存与关键词记忆",
+        "榜单雷达与请求熔断"
+      ]
+    },
+    {
+      "id": "radio",
+      "version": "2.5.0",
+      "minAppVersion": "2.5.0",
+      "title": "收音机",
+      "entry": "modules/radio/RadioScreen",
+      "pack": "module-packs/radio.json",
+      "checksum": "4af00fbffaae37cd",
+      "size": 5218,
+      "changelog": [
+        "离线节目单",
+        "预缓存与断网回退播放",
+        "缓存容量管理"
+      ]
+    }
+  ]
+}

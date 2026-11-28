@@ -209,11 +209,20 @@ class AudioPlayerService {
     const token = ++this.playToken;
     await this.releaseSound();
 
+    /**
+     * v2.5.0：除网络流外，还接受离线缓存的 file:// / 本地路径 / Web blob: 地址，
+     * 让收音机断网时可以直接播放已缓存节目。
+     */
+    const isPlayableUri = (uri: string): boolean =>
+      /^https?:\/\//i.test(uri) ||
+      /^file:\/\//i.test(uri) ||
+      /^blob:/i.test(uri) ||
+      /^\/[^/]/.test(uri);
     const candidates = Array.from(
-      new Set([url, ...fallbackUrls].filter((u) => !!u && /^https?:\/\//i.test(u)))
+      new Set([url, ...fallbackUrls].filter((u) => !!u && isPlayableUri(u)))
     );
     if (candidates.length === 0) {
-      this.emit({ error: "音频地址无效，需以 http(s):// 开头", isLoading: false, isPlaying: false });
+      this.emit({ error: "音频地址无效，需为网络流或本地缓存文件", isLoading: false, isPlaying: false });
       return false;
     }
 

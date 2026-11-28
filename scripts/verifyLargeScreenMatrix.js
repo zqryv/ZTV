@@ -136,13 +136,13 @@ check("大屏命中 TV 形态（Web 也能拿到 10-foot 标尺）",
   m1080.isTVLike && m720.isTVLike && m4k.isTVLike);
 
 // ── 4. 静态不变式 ─────────────────────────────────────────────────────────
-for (const page of ["app/search.tsx", "app/music.tsx", "app/radio.tsx"]) {
+for (const page of ["modules/search/SearchScreen.tsx", "modules/music/MusicScreen.tsx", "modules/radio/RadioScreen.tsx"]) {
   check(`${page} 左栏滚动兜底`,
     has(page, "contentContainerStyle={dyn.leftColumnContent}") && has(page, "leftColumnContent"));
   check(`${page} 分栏受可用高度约束`, has(page, "maxHeight: m.contentHeight"));
   check(`${page} 使用最小点击区标尺`, has(page, "minTouchTarget"));
 }
-check("音乐右栏按扣除侧栏后的宽度推导", has("app/music.tsx", "metrics.contentWidth - metrics.leftWidth"));
+check("音乐右栏按扣除侧栏后的宽度推导", has("modules/music/MusicScreen.tsx", "metrics.contentWidth - metrics.leftWidth"));
 check("系统字体缩放已关闭", has("components/ThemedText.tsx", "allowFontScaling={false}") &&
   has("components/ThemedText.tsx", "maxFontSizeMultiplier={1}"));
 check("TV 端 useScale 不再按宽度放大行高", !has("hooks/useScale.ts", "width / 1000"));
@@ -152,13 +152,13 @@ check("窗口 / 分辨率变化监听齐全", has("utils/DesignTokens.ts", 'addE
 check("Web 大屏键盘 / 遥控器桥接", has("hooks/useSafeTVEventHandler.ts", 'addEventListener("keydown"') &&
   has("hooks/useSafeTVEventHandler.ts", "moveDomFocus"));
 check("焦点由原生 / DOM 驱动（onFocus 同步视觉焦点）",
-  has("app/music.tsx", "onFocus={() => setFocusIndex(index)}") &&
-  has("app/radio.tsx", "onFocus={() => setFocusIndex(index)}"));
+  has("modules/music/MusicScreen.tsx", "onFocus={() => setFocusIndex(index)}") &&
+  has("modules/radio/RadioScreen.tsx", "onFocus={() => setFocusIndex(index)}"));
 check("TV 焦点单轨：不再有 select/up/down 全局消费",
-  !has("app/music.tsx", 'case "select"') && !has("app/music.tsx", 'case "up"') &&
-  !has("app/radio.tsx", 'case "select"') && !has("app/radio.tsx", 'case "down"'));
-check("首项有 TV 初始焦点", has("app/music.tsx", "hasTVPreferredFocus") &&
-  has("app/radio.tsx", "hasTVPreferredFocus"));
+  !has("modules/music/MusicScreen.tsx", 'case "select"') && !has("modules/music/MusicScreen.tsx", 'case "up"') &&
+  !has("modules/radio/RadioScreen.tsx", 'case "select"') && !has("modules/radio/RadioScreen.tsx", 'case "down"'));
+check("首项有 TV 初始焦点", has("modules/music/MusicScreen.tsx", "hasTVPreferredFocus") &&
+  has("modules/radio/RadioScreen.tsx", "hasTVPreferredFocus"));
 check("键盘功能行按面板权重分配", has("components/SearchKeyboard.tsx", "getKeyboardActionWidths") &&
   !has("components/SearchKeyboard.tsx", "Math.max(48, letterKeyWidth"));
 check("键盘按键可收缩且带 hitSlop", has("components/SearchKeyboard.tsx", "flexShrink: 1") &&

@@ -13,6 +13,7 @@ import { APIConfigSection } from "@/components/settings/APIConfigSection";
 import { TVSourcesSection, TVSourcesSectionRef } from "@/components/settings/TVSourcesSection";
 import { RemoteInputSection } from "@/components/settings/RemoteInputSection";
 import { UpdateSection } from "@/components/settings/UpdateSection";
+import { ModuleUpdateSection } from "@/components/settings/ModuleUpdateSection";
 import { DeviceInfoSection } from "@/components/settings/DeviceInfoSection";
 // import { VideoSourceSection } from "@/components/settings/VideoSourceSection";
 import Toast from "react-native-toast-message";
@@ -207,6 +208,11 @@ export default function SettingsScreen() {
     {
       component: <UpdateSection />,
       key: "update",
+    },
+    // v2.5.0：搜索 / 音乐在线 / 收音机可各自独立检查与升级
+    {
+      component: <ModuleUpdateSection />,
+      key: "modules",
     },
   ] as const; // 把每个对象都当作字面量保留
   /** 这里得到的 sections 已经是 SectionItem[]（没有 false） */

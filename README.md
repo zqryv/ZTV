@@ -4,6 +4,16 @@
 
 ## ✨ ZTV 功能
 
+### v2.5.0 中文输入 / 离线广播 / 模块化独立升级
+
+- **搜索框焦点修复**：新增 `components/SearchInput.tsx` 统一可聚焦输入组件，去掉包裹 `TextInput` 的 `TouchableOpacity`（它抢走了指针事件）、移除音乐页 TV 上的 `focusable={false}`、`onFocus` 不再收起屏幕键盘；清空按钮移到输入框外层，所有平台一律 `editable` / `focusable`。搜索页与音乐在线页共用。
+- **内置键盘支持中文**：`utils/pinyinIme.ts` 提供拼音组合串、全拼 / 首字母 / 单字三路候选召回、候选点选、中文码点安全删除；键盘新增「中 / En」切换、拼音显示区与候选栏。删除键先退拼音再退文字，清空键一次复位正文 / 组合 / 结果，返回键按「取消组合 → 收键盘 → 退页」依次回退。
+- **音乐在线融合 Solara 思路**：有效结果缓存（空结果 / 错误响应不入库）、关键词无感记忆、多榜单去重 + 随机注入雷达、请求熔断与切换曲库不误触发；保留「在线检索 → 音乐电台 → 内置曲库」三级降级。仅借鉴设计，未复制其代码（Solara 为 CC BY-NC-SA，出处见 `docs/MODULAR_ARCHITECTURE.md`）。
+- **收音机离线可听**：新增 12 条公版离线节目与预缓存能力，原生用 `expo-file-system`、Web 用 Cache API；播放器支持 `file://` / `blob:`；直播失败自动回退到已缓存节目。详见 [`docs/OFFLINE_RADIO.md`](docs/OFFLINE_RADIO.md)。
+- **模块化独立升级**：三个屏幕迁入 `modules/<id>/`，`app/` 只留 3 行路由薄壳；每个模块有独立版本清单与几 KB 的 JSON 资源包，可单独检查 / 更新 / 回滚，无需重新下载安装整个 App（整包 67~165 MB vs 单模块 0.5~6 KB）。设置页新增「模块独立更新」入口。详见 [`docs/MODULAR_ARCHITECTURE.md`](docs/MODULAR_ARCHITECTURE.md)。
+- **国内 / 海外都能检查并安装更新**：`services/updateChannels.ts` 把版本检查、模块清单、安装包下载分成国内通道（jsDelivr 三节点 + 四个 GitHub 加速代理）与海外通道（GitHub raw / Releases 直连），并发竞速、按成功耗时记忆优选通道，设置页可手动切换；模块清单与资源包同样双通道下发。
+- **验证**：`tsc --noEmit` 0 错误、Jest 10 suites / 106 tests、`verifyRefactor` 54/54、`verifyLargeScreenMatrix` 248/248、`verifyModules` 53/53、`verifyAudioSources` 18/18。
+
 ### v2.4.0 电视 / 投影仪大屏适配与 GitHub Pages 站点
 
 - **响应式标尺重构**：新增 `utils/LargeScreen.ts` 纯计算层，尺寸同时受宽、高、宽高比与相对 1080p 的分辨率缩放约束，并扣除 200px 侧栏 / 顶栏占用；`utils/DesignTokens.ts` 显式监听 Dimensions change、window resize、orientationchange 与 visualViewport，投影仪切换分辨率、横竖屏旋转、浏览器缩放都会即时重排。低可用高度与竖屏自动降级单列。

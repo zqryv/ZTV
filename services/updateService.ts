@@ -13,6 +13,15 @@ import {
 } from "../constants/UpdateConfig";
 import { DeviceUtils } from "@/utils/DeviceUtils";
 import Logger from "@/utils/Logger";
+import {
+  getReleaseAssetUrls,
+  getUpdateRegion,
+  setUpdateRegion,
+  getVersionChannelUrls,
+  UpdateRegion,
+} from "@/services/updateChannels";
+import { moduleManager } from "@/modules/ModuleManager";
+import { ModuleApplyResult, ModuleId, ModuleUpdateInfo } from "@/modules/contracts";
 
 const logger = Logger.withTag("UpdateService");
 const ANDROID_MIME_TYPE = "application/vnd.android.package-archive";
@@ -221,7 +230,14 @@ class UpdateService {
       ).then((release) => this.fromRelease(release, target)),
     );
 
-    const mirrorPromises = UPDATE_CONFIG.getVersionMirrorUrls().map((url) =>
+    // v2.5.0：按用户所在网络优选国内 / 海外通道，再与原有镜像合并去重；
+    // 全部并发竞速，任一地区端点可用即可完成版本检查。
+    const channelUrls = await getVersionChannelUrls().catch(() => [] as string[]);
+    const mirrorUrls = Array.from(new Set([
+      ...channelUrls,
+      ...UPDATE_CONFIG.getVersionMirrorUrls(),
+    ]));
+    const mirrorPromises = mirrorUrls.map((url) =>
       swallowRejection(
         this.fetchJson<{ version?: string }>(url, timeout, { Accept: "application/json" }, controller.signal).then(
           (pkg) => this.fromPackage(pkg, target),
@@ -373,7 +389,11 @@ class UpdateService {
     await this.cleanOldDownloads();
     const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
     const fileUri = `${dirUri}${safeName}`;
-    const urls = (candidates?.length ? candidates : [url]).filter(Boolean);
+    const baseUrls = (candidates?.length ? candidates : [url]).filter(Boolean);
+    // 按当前网络通道重排：国内优先加速代理，海外优先 GitHub 直连
+    const directUrl = baseUrls.find((item) => item.includes("/releases/download/")) ?? url;
+    const regionUrls = await getReleaseAssetUrls(directUrl).catch(() => [] as string[]);
+    const urls = Array.from(new Set([...regionUrls, ...baseUrls]));
     const maxAttempts = Math.min(UPDATE_CONFIG.DOWNLOAD_MAX_RETRIES, Math.max(urls.length, 2));
     let lastError: unknown = null;
 
@@ -497,6 +517,31 @@ class UpdateService {
 
   isUpdateAvailable(remoteVersion: string): boolean {
     return !!remoteVersion && this.compareVersions(remoteVersion, currentVersion) > 0;
+  }
+
+  // ── v2.5.0 模块级独立更新：不下载整包 App，不影响其它模块 ──────────────
+  async checkModuleUpdates(): Promise<ModuleUpdateInfo[]> {
+    return moduleManager.checkModuleUpdates();
+  }
+
+  async updateModule(id: ModuleId): Promise<ModuleApplyResult> {
+    return moduleManager.updateModule(id);
+  }
+
+  async rollbackModule(id: ModuleId): Promise<void> {
+    await moduleManager.rollback(id);
+  }
+
+  async getModuleStates() {
+    return moduleManager.getStates();
+  }
+
+  getUpdateRegion(): Promise<UpdateRegion> {
+    return getUpdateRegion();
+  }
+
+  setUpdateRegion(region: UpdateRegion): Promise<void> {
+    return setUpdateRegion(region);
   }
 
   getTargetLabel(target: UpdateTarget): string {
