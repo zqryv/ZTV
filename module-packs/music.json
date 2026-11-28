@@ -1,0 +1,36 @@
+{
+  "id": "music",
+  "version": "2.5.0",
+  "config": {
+    "cacheTtlMs": 1800000,
+    "cacheMaxEntries": 60,
+    "debounceMs": 320,
+    "circuitThreshold": 3,
+    "circuitCooldownMs": 60000,
+    "rememberQuery": true,
+    "radar": {
+      "chartSize": 20,
+      "injectCount": 6,
+      "excludeRecent": true
+    },
+    "qualityPreference": "320",
+    "sourceSwitchAutoSearch": false,
+    "sources": [
+      "latest",
+      "channels",
+      "builtin"
+    ],
+    "quickTerms": [
+      "周杰伦",
+      "邓紫棋",
+      "陈奕迅",
+      "Taylor Swift",
+      "华语",
+      "流行",
+      "古典",
+      "爵士",
+      "轻音乐",
+      "电子"
+    ]
+  }
+}

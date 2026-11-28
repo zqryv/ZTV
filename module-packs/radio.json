@@ -1,0 +1,173 @@
+{
+  "id": "radio",
+  "version": "2.5.0",
+  "config": {
+    "cacheQuotaMB": 256,
+    "preloadCount": 3,
+    "autoFallbackToCached": true,
+    "maxConcurrentDownloads": 2,
+    "categories": [
+      "全部",
+      "直播",
+      "离线"
+    ],
+    "offlinePrograms": [
+      {
+        "id": "offline-cn-1",
+        "name": "晨间轻音乐",
+        "category": "轻音乐",
+        "country": "中国大陆",
+        "description": "公版器乐 · 适合晨间收听",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 360,
+        "estimatedMB": 7,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-cn-2",
+        "name": "午后爵士",
+        "category": "爵士",
+        "country": "中国大陆",
+        "description": "公版器乐 · 松弛的午后时段",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 420,
+        "estimatedMB": 8,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-cn-3",
+        "name": "城市夜航",
+        "category": "电子",
+        "country": "中国大陆",
+        "description": "公版器乐 · 夜间氛围",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 360,
+        "estimatedMB": 7,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-tw-1",
+        "name": "海峡旋律",
+        "category": "音乐",
+        "country": "中国台湾",
+        "description": "公版器乐 · 华语轻音乐选段",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 420,
+        "estimatedMB": 8,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-us-1",
+        "name": "蓝调公路",
+        "category": "爵士",
+        "country": "美国",
+        "description": "公版器乐 · 公路电台风格",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 360,
+        "estimatedMB": 7,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-us-2",
+        "name": "古典时刻",
+        "category": "古典",
+        "country": "美国",
+        "description": "公版器乐 · 古典选段",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 480,
+        "estimatedMB": 9,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-jp-1",
+        "name": "樱色音景",
+        "category": "轻音乐",
+        "country": "日本",
+        "description": "公版器乐 · 环境音景",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 360,
+        "estimatedMB": 7,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-eu-1",
+        "name": "欧陆晨曲",
+        "category": "古典",
+        "country": "欧洲",
+        "description": "公版器乐 · 晨间古典",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 420,
+        "estimatedMB": 8,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-eu-2",
+        "name": "深夜电台",
+        "category": "音乐",
+        "country": "欧洲",
+        "description": "公版器乐 · 深夜陪伴",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 360,
+        "estimatedMB": 7,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-kr-1",
+        "name": "首尔慢调",
+        "category": "流行",
+        "country": "韩国",
+        "description": "公版器乐 · 慢调节目",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 300,
+        "estimatedMB": 6,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-cn-4",
+        "name": "文化讲堂",
+        "category": "文化",
+        "country": "中国大陆",
+        "description": "公版器乐 · 文化节目底乐",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 480,
+        "estimatedMB": 9,
+        "kind": "offline"
+      },
+      {
+        "id": "offline-cn-5",
+        "name": "周末精选",
+        "category": "音乐",
+        "country": "中国大陆",
+        "description": "公版器乐 · 周末合辑",
+        "url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3",
+        "license": "SoundHelix 公开演示音频（公版器乐，允许离线缓存）",
+        "source": "SoundHelix 公版器乐",
+        "durationSec": 420,
+        "estimatedMB": 8,
+        "kind": "offline"
+      }
+    ]
+  }
+}

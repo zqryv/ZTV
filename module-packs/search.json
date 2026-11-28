@@ -1,0 +1,32 @@
+{
+  "id": "search",
+  "version": "2.5.0",
+  "config": {
+    "maxKeywordLength": 40,
+    "imeEnabledByDefault": true,
+    "letterRows": [
+      "QWERTYUIOP",
+      "ASDFGHJKL",
+      "ZXCVBNM"
+    ],
+    "numberRows": [
+      "1234567890",
+      "-/:;()@&\""
+    ],
+    "candidateLimit": 8,
+    "commitCompositionOnSearch": true,
+    "quickTerms": [
+      "庆余年",
+      "流浪地球",
+      "三体",
+      "繁花",
+      "狂飙",
+      "漫长的季节"
+    ],
+    "hints": [
+      "输入拼音如 qingyu 选中文",
+      "输入首字母 QYN 直达片名",
+      "删除键先退拼音再退文字"
+    ]
+  }
+}
