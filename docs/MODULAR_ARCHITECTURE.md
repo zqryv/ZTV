@@ -35,7 +35,7 @@ ZTV/
 │   └── SearchKeyboard.tsx        # 中文拼音候选键盘
 ├── utils/pinyinIme.ts            # 中文拼音输入引擎（纯计算、零依赖）
 ├── services/
-│   ├── updateChannels.ts         # 国内 / 海外双通道选址
+│   ├── updateChannels.ts         # 国内 / 海外双通道 + Pages 兜底选址
 │   ├── updateService.ts          # 整包更新 + 模块更新统一入口
 │   └── offlineCache.ts(.web.ts)  # 离线音频缓存（原生 / Web 双实现）
 ├── module-packs/                 # 可远程下发的模块资源包（JSON，每个几 KB）
@@ -91,7 +91,7 @@ const config = await moduleManager.getConfig<MusicModuleConfig>("music");
 
 | 项目 | 结果 |
 | --- | --- |
-| `node scripts/verifyModules.js` | **53/53**（清单 / 校验和 / 单模块重建 / 契约 / 焦点 / 双通道） |
+| `node scripts/verifyModules.js` | **57/57**（清单 / 校验和 / CRLF 兼容 / 单模块重建 / 契约 / 焦点 / 双通道 + Pages 兜底） |
 | `node scripts/verifyRefactor.js` | **54/54** |
 | `node scripts/verifyLargeScreenMatrix.js` | **248/248** |
 | `npx tsc --noEmit` | 0 错误 |

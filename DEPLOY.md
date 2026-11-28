@@ -64,7 +64,7 @@ yarn typecheck                       # tsc --noEmit
 npx jest --ci --runInBand            # 单元 / 快照测试
 node scripts/verifyRefactor.js       # 既有重构不变式
 node scripts/verifyLargeScreenMatrix.js  # 大屏分辨率矩阵（8 分辨率 × 3 平台）
-node scripts/verifyModules.js        # 模块化 / 中文输入 / 离线 / 双通道
+node scripts/verifyModules.js        # 模块化 / 中文输入 / 离线 / 双通道 + Pages 兜底
 node scripts/verifyAudioSources.js  # 音源真实可用性
 node scripts/buildModulePacks.js    # 重建模块资源包与清单
 npx expo export --platform web      # Web/PWA 静态导出

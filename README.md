@@ -11,8 +11,8 @@
 - **音乐在线融合 Solara 思路**：有效结果缓存（空结果 / 错误响应不入库）、关键词无感记忆、多榜单去重 + 随机注入雷达、请求熔断与切换曲库不误触发；保留「在线检索 → 音乐电台 → 内置曲库」三级降级。仅借鉴设计，未复制其代码（Solara 为 CC BY-NC-SA，出处见 `docs/MODULAR_ARCHITECTURE.md`）。
 - **收音机离线可听**：新增 12 条公版离线节目与预缓存能力，原生用 `expo-file-system`、Web 用 Cache API；播放器支持 `file://` / `blob:`；直播失败自动回退到已缓存节目。详见 [`docs/OFFLINE_RADIO.md`](docs/OFFLINE_RADIO.md)。
 - **模块化独立升级**：三个屏幕迁入 `modules/<id>/`，`app/` 只留 3 行路由薄壳；每个模块有独立版本清单与几 KB 的 JSON 资源包，可单独检查 / 更新 / 回滚，无需重新下载安装整个 App（整包 67~165 MB vs 单模块 0.5~6 KB）。设置页新增「模块独立更新」入口。详见 [`docs/MODULAR_ARCHITECTURE.md`](docs/MODULAR_ARCHITECTURE.md)。
-- **国内 / 海外都能检查并安装更新**：`services/updateChannels.ts` 把版本检查、模块清单、安装包下载分成国内通道（jsDelivr 三节点 + 四个 GitHub 加速代理）与海外通道（GitHub raw / Releases 直连），并发竞速、按成功耗时记忆优选通道，设置页可手动切换；模块清单与资源包同样双通道下发。
-- **验证**：`tsc --noEmit` 0 错误、Jest 10 suites / 106 tests、`verifyRefactor` 54/54、`verifyLargeScreenMatrix` 248/248、`verifyModules` 53/53、`verifyAudioSources` 18/18。
+- **国内 / 海外都能检查并安装更新**：`services/updateChannels.ts` 把版本检查、模块清单、安装包下载分成国内通道（jsDelivr 三节点 + 四个 GitHub 加速代理）与海外通道（GitHub raw / Releases 直连），并发竞速、按成功耗时记忆优选通道，设置页可手动切换；模块清单与资源包同样双通道下发。另有 GitHub Pages 站点作为第三兜底通道，`version.json`、模块清单与资源包随站点一同发布。
+- **验证**：`tsc --noEmit` 0 错误、Jest 10 suites / 106 tests、`verifyRefactor` 54/54、`verifyLargeScreenMatrix` 248/248、`verifyModules` 57/57、`verifyAudioSources` 18/18。
 
 ### v2.4.0 电视 / 投影仪大屏适配与 GitHub Pages 站点
 
