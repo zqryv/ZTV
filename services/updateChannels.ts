@@ -19,6 +19,10 @@ const GH_RAW = `https://raw.githubusercontent.com/${OWNER}/${REPO}/main`;
 const GH_WEB_RAW = `https://github.com/${OWNER}/${REPO}/raw/refs/heads/main`;
 const GH_RELEASES = `https://github.com/${OWNER}/${REPO}/releases`;
 
+/** GitHub Pages 站点：jsDelivr / raw 被网络环境阻断时的第三通道，实测国内海外均可达 */
+export const PAGES_BASE = `https://${OWNER.toLowerCase()}.github.io/${REPO}`;
+export const FALLBACK_BASES = [PAGES_BASE];
+
 /** jsDelivr 官方节点：国内三大运营商均可直连，海外也有边缘节点 */
 export const DOMESTIC_BASES = [
   `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@main`,
@@ -107,10 +111,13 @@ const preferLastFastest = async (urls: string[]): Promise<string[]> => {
   }
 };
 
-/** 版本检查用候选地址（package.json） */
+/** 版本检查用候选地址（package.json / Pages 上的 version.json） */
 export const getVersionChannelUrls = async (): Promise<string[]> => {
   const region = await getUpdateRegion();
-  const domestic = withStamp(DOMESTIC_BASES.map((b) => `${b}/package.json`));
+  const domestic = withStamp([
+    ...DOMESTIC_BASES.map((b) => `${b}/package.json`),
+    ...FALLBACK_BASES.map((b) => `${b}/version.json`),
+  ]);
   const overseas = withStamp(OVERSEAS_BASES.map((b) => `${b}/package.json`));
   return preferLastFastest(orderByRegion(domestic, overseas, region));
 };
@@ -118,7 +125,8 @@ export const getVersionChannelUrls = async (): Promise<string[]> => {
 /** 模块清单用候选地址 */
 export const getModuleRegistryUrls = async (): Promise<string[]> => {
   const region = await getUpdateRegion();
-  const domestic = withStamp(DOMESTIC_BASES.map((b) => `${b}/module-registry.json`));
+  const domestic = withStamp([...DOMESTIC_BASES, ...FALLBACK_BASES]
+    .map((b) => `${b}/module-registry.json`));
   const overseas = withStamp(OVERSEAS_BASES.map((b) => `${b}/module-registry.json`));
   return preferLastFastest(orderByRegion(domestic, overseas, region));
 };
@@ -127,7 +135,8 @@ export const getModuleRegistryUrls = async (): Promise<string[]> => {
 export const getModulePackUrls = async (id: string): Promise<string[]> => {
   const region = await getUpdateRegion();
   const file = `module-packs/${id}.json`;
-  const domestic = withStamp(DOMESTIC_BASES.map((b) => `${b}/${file}`));
+  const domestic = withStamp([...DOMESTIC_BASES, ...FALLBACK_BASES]
+    .map((b) => `${b}/${file}`));
   const overseas = withStamp(OVERSEAS_BASES.map((b) => `${b}/${file}`));
   return preferLastFastest(orderByRegion(domestic, overseas, region));
 };
@@ -151,7 +160,8 @@ export const recordEndpointResult = async (
   latencyMs: number,
 ): Promise<void> => {
   try {
-    const base = DOMESTIC_BASES.concat(OVERSEAS_BASES).find((b) => url.startsWith(b));
+    const base = DOMESTIC_BASES.concat(OVERSEAS_BASES, FALLBACK_BASES)
+      .find((b) => url.startsWith(b));
     if (!base) return;
     if (ok) {
       await AsyncStorage.setItem(PREFERRED_BASE_KEY, base);

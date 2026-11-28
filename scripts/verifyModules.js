@@ -171,6 +171,12 @@ check("区域偏好可切换并记忆成功通道", channels.includes("setUpdate
 check("安装包多镜像换源", (read("constants/UpdateConfig.ts").match(/https:\/\/gh/g) || []).length >= 4);
 check("模块包双通道下发", has("constants/UpdateConfig.ts", "getModuleRegistryUrls") &&
   has("constants/UpdateConfig.ts", "getModulePackUrls"));
+check("Pages 兜底通道覆盖版本/清单/资源包",
+  channels.includes("PAGES_BASE") &&
+  channels.includes("FALLBACK_BASES") &&
+  channels.includes("/version.json") &&
+  read("constants/UpdateConfig.ts").includes("PAGES_BASE") &&
+  has("scripts/preparePages.js", "version.json"));
 check("app.json 声明模块清单与通道", has("app.json", "moduleRegistry") &&
   has("app.json", "updateChannels"));
 

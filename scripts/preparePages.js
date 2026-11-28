@@ -64,8 +64,17 @@ for (const route of ROUTES) {
   fs.writeFileSync(path.join(routeDir, "index.html"), html, "utf8");
 }
 
-// v2.5.0：把模块清单与资源包一并发布到站点，便于查看与外部系统集成
+// v2.5.0：发布精简版本文件，作为 jsDelivr / raw 之外的 Pages 兜底版本检查端点
 const projectRoot = process.cwd();
+const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+writeFile("version.json", JSON.stringify({
+  version: pkg.version,
+  appVersion: pkg.version,
+  moduleRegistry: "module-registry.json",
+  updatedAt: new Date().toISOString(),
+}, null, 2) + "\n");
+
+// v2.5.0：把模块清单与资源包一并发布到站点，便于查看与外部系统集成
 const registrySrc = path.join(projectRoot, "module-registry.json");
 if (fs.existsSync(registrySrc)) {
   fs.copyFileSync(registrySrc, path.join(root, "module-registry.json"));

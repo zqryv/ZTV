@@ -94,7 +94,8 @@
       "updateRegion": "auto",
       "updateChannels": {
         "domestic": "cdn.jsdelivr.net",
-        "overseas": "raw.githubusercontent.com"
+        "overseas": "raw.githubusercontent.com",
+        "fallback": "zqryv.github.io"
       }
     }
   }

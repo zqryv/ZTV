@@ -59,15 +59,19 @@ export const TARGET_LABELS: Record<UpdateTarget, string> = {
 };
 
 /**
- * v2.5.0 双通道：国内走 jsDelivr 三节点 + GitHub 加速代理，
- * 海外走 raw.githubusercontent.com / github.com 直连。
+ * v2.5.0 双通道 + Pages 兜底：国内走 jsDelivr 三节点 + GitHub 加速代理，
+ * 海外走 raw.githubusercontent.com / github.com 直连；
+ * 两组之外再保留已验证可达的 GitHub Pages 站点作为第三通道。
  * 时间戳在「每次请求时」生成，避免 CDN 返回旧版本。
  */
+const PAGES_BASE = `https://${GITHUB_OWNER.toLowerCase()}.github.io/${GITHUB_REPO}`;
+
 const DOMESTIC_VERSION_MIRRORS: Array<() => string> = [
   () => `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
   () => `https://fastly.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
   () => `https://gcore.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main/package.json?t=${Date.now()}`,
   () => `https://ghproxy.net/${GITHUB_RAW_BASE}/main/package.json?t=${Date.now()}`,
+  () => `${PAGES_BASE}/version.json?t=${Date.now()}`,
 ];
 
 const OVERSEAS_VERSION_MIRRORS: Array<() => string> = [
@@ -96,6 +100,7 @@ const MODULE_FILE_MIRRORS = [
   `https://cdn.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main`,
   `https://fastly.jsdelivr.net/gh/${GITHUB_OWNER}/${GITHUB_REPO}@main`,
   GITHUB_RAW_BASE,
+  PAGES_BASE,
 ];
 
 export const UPDATE_CONFIG = {

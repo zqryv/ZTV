@@ -76,7 +76,7 @@ npx expo export --platform web      # Web/PWA 静态导出
 - Jest：**10 suites / 106 tests / 1 snapshot 全通过**（新增拼音输入、音乐雷达 / 熔断、模块校验和、内置资源包 4 组测试）。
 - `verifyRefactor.js`：**54/54**（含三处版本号统一 2.5.0、路由薄壳化、焦点修复）。
 - `verifyLargeScreenMatrix.js`：**248/248**，8 分辨率 × 3 平台。
-- `verifyModules.js`：**53/53**（清单校验和一致性、单模块重建、中文输入语义、离线节目、双通道）。
+- `verifyModules.js`：**57/57**（清单校验和一致性、CRLF 代理换行兼容、单模块重建、中文输入语义、离线节目、双通道 + Pages 兜底）。
 - `verifyAudioSources.js`：**18/18**。
 - Web 静态导出与线上多视口 headless 渲染通过。
 - 完整说明：`docs/MODULAR_ARCHITECTURE.md`、`docs/OFFLINE_RADIO.md`、`docs/LARGE_SCREEN_ADAPTATION.md`。
@@ -94,12 +94,14 @@ node scripts/buildModulePacks.js --only music
 
 ## 9. 国内 / 海外更新通道
 
-| 用途 | 国内通道 | 海外通道 |
-| --- | --- | --- |
-| 版本检查 / 模块清单 / 资源包 | `cdn.jsdelivr.net`、`fastly.jsdelivr.net`、`gcore.jsdelivr.net`、`ghproxy.net` 代理 | `raw.githubusercontent.com`、`github.com/raw/refs/heads/main` |
-| 安装包下载 | `ghfast.top`、`gh-proxy.com`、`ghproxy.net`、`hub.gitmirror.com` 四个加速前缀 | GitHub Releases 直连 |
+| 用途 | 国内通道 | 海外通道 | 兜底通道 |
+| --- | --- | --- | --- |
+| 版本检查 / 模块清单 / 资源包 | `cdn.jsdelivr.net`、`fastly.jsdelivr.net`、`gcore.jsdelivr.net`、`ghproxy.net` 代理 | `raw.githubusercontent.com`、`github.com/raw/refs/heads/main` | `zqryv.github.io/ZTV`（`version.json` / `module-registry.json` / `module-packs/*.json`） |
+| 安装包下载 | `ghfast.top`、`gh-proxy.com`、`ghproxy.net`、`hub.gitmirror.com` 四个加速前缀 | GitHub Releases 直连 | 设置页手动打开 Release 页面 |
 
 - `services/updateChannels.ts` 在 `auto` 模式下用时区 / 语言提示选择首轮优先通道，但**两组端点始终全部保留**作兜底；所有请求并发竞速，任一可用即成功。
 - 成功端点的耗时写入 AsyncStorage，下次优先；用户也可在「设置 → 模块独立更新」手动切换自动 / 国内优先 / 海外优先。
-- 所有 URL 带请求时时间戳，避免 CDN 返回旧版本；模块包独立走 jsDelivr + GitHub raw 双通道。
+- 所有 URL 带请求时时间戳，避免 CDN 返回旧版本；模块包独立走 jsDelivr + GitHub raw + Pages 三通道。
+- `scripts/preparePages.js` 会把 `version.json`、模块清单与资源包一并发布到 Pages；当 `cdn.jsdelivr.net` 或 `raw.githubusercontent.com` 在本地网络被 TLS 阻断时，客户端仍能完成版本检查与模块升级。
+- v2.5.0 线上实测：Pages 站点首页及 `search` / `music` / `radio` / `settings` 深链、`manifest.json`、`module-registry.json`、`module-packs/radio.json` 全部 **HTTP 200**；jsDelivr 的 Fastly / Gcore 节点与 `ghproxy.net` 返回 `version=2.5.0`。
 - `app.json` 的 `extra` 声明 `moduleRegistry` / `modulePackDir` / `updateChannels`，便于换仓库或自建镜像时统一改配置。
